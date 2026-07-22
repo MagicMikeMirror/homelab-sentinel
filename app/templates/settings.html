@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ config.app_name }} · Einstellungen</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="shell narrow-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">EINSTELLUNGEN</p>
+        <h1>{{ config.app_name }}</h1>
+        <p class="subtitle">Lokale Anschlussdaten und automatisch erzeugte Zugangswerte.</p>
+      </div>
+      <a class="button secondary" href="/">Zum Dashboard</a>
+    </header>
+
+    {% if welcome %}
+    <section class="success-banner">Einrichtung abgeschlossen. Bewahre den Ingest-Token sicher auf.</section>
+    {% endif %}
+
+    <section class="card section-card">
+      <p class="label">Ingest API</p>
+      <h2>Token für Datenquellen</h2>
+      <p class="muted">Diesen Token benötigen CrowdSec und andere Quellen im HTTP-Header <code>X-Sentinel-Token</code>.</p>
+      <div class="secret-box">
+        <code id="token-value">{{ config.ingest_token }}</code>
+        <button type="button" class="button secondary" onclick="navigator.clipboard.writeText(document.getElementById('token-value').textContent)">Kopieren</button>
+      </div>
+      <form method="post" action="/settings/token/rotate" onsubmit="return confirm('Der bisherige Token funktioniert danach nicht mehr. Wirklich neu erzeugen?')">
+        <button class="button danger" type="submit">Token neu erzeugen</button>
+      </form>
+    </section>
+
+    <section class="card section-card">
+      <p class="label">Endpunkte</p>
+      <div class="endpoint-row"><span>CrowdSec</span><code>POST /api/v1/crowdsec</code></div>
+      <div class="endpoint-row"><span>Allgemeine Ereignisse</span><code>POST /api/v1/events</code></div>
+      <div class="endpoint-row"><span>Healthcheck</span><code>GET /health</code></div>
+    </section>
+
+    <section class="card section-card">
+      <p class="label">Konfiguration</p>
+      <div class="endpoint-row"><span>Firewall</span><strong>{{ config.firewall_name }}</strong></div>
+      <div class="endpoint-row"><span>Entfernter Server</span><strong>{% if config.server_enabled %}{{ config.server_name }}{% else %}Deaktiviert{% endif %}</strong></div>
+      <div class="endpoint-row"><span>Privates VPN</span><strong>{% if config.tailscale_enabled %}Aktiviert{% else %}Nicht angegeben{% endif %}</strong></div>
+      <div class="endpoint-row"><span>Benachrichtigungen</span><strong>{{ config.notification_provider }}</strong></div>
+    </section>
+  </main>
+</body>
+</html>
