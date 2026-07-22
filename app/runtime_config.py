@@ -15,6 +15,9 @@ _DEFAULTS: dict[str, Any] = {
     "server_name": "Remote Server",
     "tailscale_enabled": False,
     "notification_provider": "none",
+    "notification_target": "",
+    "crowdsec_enabled": True,
+    "generic_events_enabled": True,
 }
 
 
