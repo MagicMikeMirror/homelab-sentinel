@@ -38,7 +38,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.3.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.4.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -65,11 +65,7 @@ def setup_page(request: Request):
     config = get_runtime_config()
     if config["setup_complete"]:
         return RedirectResponse(url="/", status_code=303)
-    return templates.TemplateResponse(
-        request=request,
-        name="setup.html",
-        context={"config": config},
-    )
+    return templates.TemplateResponse(request=request, name="setup.html", context={"config": config})
 
 
 @app.post("/setup")
@@ -115,25 +111,88 @@ def dashboard(request: Request):
 
 
 @app.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request, welcome: int = Query(default=0)):
+def settings_page(
+    request: Request,
+    welcome: int = Query(default=0),
+    saved: str | None = Query(default=None),
+):
     config = get_runtime_config()
     if not config["setup_complete"]:
         return RedirectResponse(url="/setup", status_code=303)
+    token = config["ingest_token"]
+    masked_token = f"{'•' * max(len(token) - 8, 12)}{token[-8:]}"
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
-        context={"config": config, "welcome": bool(welcome)},
+        context={
+            "config": config,
+            "welcome": bool(welcome),
+            "saved": saved,
+            "masked_token": masked_token,
+        },
     )
+
+
+@app.post("/settings/general")
+def save_general_settings(
+    app_name: str = Form(default="Homelab Sentinel"),
+    firewall_name: str = Form(default="Firewall"),
+    server_enabled: str | None = Form(default=None),
+    server_name: str = Form(default="Remote Server"),
+    tailscale_enabled: str | None = Form(default=None),
+):
+    update_runtime_config(
+        {
+            "app_name": app_name.strip() or "Homelab Sentinel",
+            "firewall_name": firewall_name.strip() or "Firewall",
+            "server_enabled": server_enabled == "on",
+            "server_name": server_name.strip() or "Remote Server",
+            "tailscale_enabled": tailscale_enabled == "on",
+        }
+    )
+    sync_configured_sources()
+    return RedirectResponse(url="/settings?saved=general", status_code=303)
+
+
+@app.post("/settings/collectors")
+def save_collector_settings(
+    crowdsec_enabled: str | None = Form(default=None),
+    generic_events_enabled: str | None = Form(default=None),
+):
+    update_runtime_config(
+        {
+            "crowdsec_enabled": crowdsec_enabled == "on",
+            "generic_events_enabled": generic_events_enabled == "on",
+        }
+    )
+    return RedirectResponse(url="/settings?saved=collectors", status_code=303)
+
+
+@app.post("/settings/notifications")
+def save_notification_settings(
+    notification_provider: str = Form(default="none"),
+    notification_target: str = Form(default=""),
+):
+    update_runtime_config(
+        {
+            "notification_provider": notification_provider,
+            "notification_target": notification_target.strip(),
+        }
+    )
+    return RedirectResponse(url="/settings?saved=notifications", status_code=303)
 
 
 @app.post("/settings/token/rotate")
 def rotate_token():
     rotate_ingest_token()
-    return RedirectResponse(url="/settings", status_code=303)
+    return RedirectResponse(url="/settings?saved=token", status_code=303)
 
 
 @app.post("/api/v1/events", status_code=201)
 def ingest_event(event: EventIn, x_sentinel_token: str | None = Header(default=None)):
+    config = get_runtime_config()
+    if not config.get("generic_events_enabled", True):
+        raise HTTPException(status_code=503, detail="Generic event ingestion is disabled")
     require_token(x_sentinel_token)
     with SessionLocal() as db:
         row = create_event(db, event)
@@ -142,6 +201,9 @@ def ingest_event(event: EventIn, x_sentinel_token: str | None = Header(default=N
 
 @app.post("/api/v1/crowdsec", status_code=202)
 def ingest_crowdsec(webhook: CrowdSecWebhook, x_sentinel_token: str | None = Header(default=None)):
+    config = get_runtime_config()
+    if not config.get("crowdsec_enabled", True):
+        raise HTTPException(status_code=503, detail="CrowdSec ingestion is disabled")
     require_token(x_sentinel_token)
     events = crowdsec_payload_to_events(webhook.source, webhook.payload)
     with SessionLocal() as db:
