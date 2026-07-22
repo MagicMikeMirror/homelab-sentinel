@@ -9,235 +9,76 @@
 <body>
   <main class="settings-shell">
     <aside class="settings-sidebar">
-      <a class="brand" href="/">
-        <span class="brand-mark">HS</span>
-        <span><strong>{{ config.app_name }}</strong><small>Security Console</small></span>
-      </a>
-      <nav class="settings-nav" aria-label="Einstellungsbereiche">
-        <a href="#general">Allgemein</a>
-        <a href="#collectors">Collector</a>
-        <a href="#notifications">Benachrichtigungen</a>
-        <a href="#api">API & Token</a>
-        <a href="#security">Sicherheit</a>
+      <a class="brand" href="/"><span class="brand-mark">HS</span><span><strong>{{ config.app_name }}</strong><small>Security Console · v{{ version }}</small></span></a>
+      <nav class="settings-nav">
+        <a href="#general">Allgemein</a><a href="#collectors">Collector</a><a href="#notifications">Benachrichtigungen</a><a href="#api">API & Token</a><a href="#security">Sicherheit</a>
       </nav>
       <a class="button secondary sidebar-button" href="/">Zum Dashboard</a>
     </aside>
 
     <section class="settings-content">
-      <header class="settings-header">
-        <div>
-          <p class="eyebrow">SYSTEMKONFIGURATION</p>
-          <h1>Einstellungen</h1>
-          <p class="subtitle">Quellen, Zugriff, Benachrichtigungen und API-Zugang zentral verwalten.</p>
-        </div>
-        <div class="status"><span></span> System bereit</div>
-      </header>
-
-      {% if welcome %}
-      <section class="success-banner">Einrichtung abgeschlossen. Dein Ingest-Token wurde sicher erzeugt.</section>
-      {% endif %}
-      {% if saved %}
-      <section class="success-banner">Änderungen wurden gespeichert.</section>
-      {% endif %}
+      <header class="settings-header"><div><p class="eyebrow">SYSTEMKONFIGURATION</p><h1>Einstellungen</h1><p class="subtitle">Quellen, Zugriff, Benachrichtigungen und API-Zugang zentral verwalten.</p></div><div class="status"><span></span> System bereit</div></header>
+      {% if welcome %}<section class="success-banner">Einrichtung abgeschlossen. Dein Ingest-Token wurde sicher erzeugt.</section>{% endif %}
+      {% if saved %}<section class="success-banner">Änderungen wurden gespeichert.</section>{% endif %}
 
       <section class="settings-section" id="general">
-        <div class="section-copy">
-          <p class="label">Allgemein</p>
-          <h2>System und Quellen</h2>
-          <p class="muted">Diese Namen erscheinen im Dashboard und können jederzeit geändert werden.</p>
-        </div>
+        <div class="section-copy"><p class="label">Allgemein</p><h2>System und Quellen</h2><p class="muted">Namen und privater Zugriff können jederzeit geändert werden.</p></div>
         <form class="settings-card form-grid" method="post" action="/settings/general">
-          <label class="field span-2">Anzeigename
-            <input name="app_name" value="{{ config.app_name }}" required maxlength="80">
-          </label>
-          <label class="field">Firewall-Name
-            <input name="firewall_name" value="{{ config.firewall_name }}" required maxlength="80">
-          </label>
-          <label class="toggle-card">
-            <input type="checkbox" name="server_enabled" id="settings-server-enabled" {% if config.server_enabled %}checked{% endif %}>
-            <span><strong>Entfernten Server verwenden</strong><small>Zusätzliche CrowdSec- oder Security-Quelle</small></span>
-          </label>
-          <label class="field span-2 {% if not config.server_enabled %}hidden{% endif %}" id="settings-server-name-wrap">Server-Name
-            <input name="server_name" value="{{ config.server_name }}" maxlength="80">
-          </label>
-          <label class="toggle-card span-2">
-            <input type="checkbox" name="tailscale_enabled" {% if config.tailscale_enabled %}checked{% endif %}>
-            <span><strong>Privates VPN aktiviert</strong><small>Zum Beispiel Tailscale, WireGuard oder ein internes VPN</small></span>
-          </label>
-          <div class="form-actions span-2"><button class="button" type="submit">Allgemeine Einstellungen speichern</button></div>
+          <label class="field span-2">Anzeigename<input name="app_name" value="{{ config.app_name }}" required maxlength="80"></label>
+          <label class="field">Firewall-Name<input name="firewall_name" value="{{ config.firewall_name }}" required maxlength="80"></label>
+          <label class="toggle-card"><input type="checkbox" name="server_enabled" id="settings-server-enabled" {% if config.server_enabled %}checked{% endif %}><span><strong>Entfernten Server verwenden</strong><small>Zusätzliche Sicherheitsquelle</small></span></label>
+          <label class="field span-2 {% if not config.server_enabled %}hidden{% endif %}" id="settings-server-name-wrap">Server-Name<input name="server_name" value="{{ config.server_name }}" maxlength="80"></label>
+          <label class="toggle-card span-2"><input type="checkbox" name="tailscale_enabled" {% if config.tailscale_enabled %}checked{% endif %}><span><strong>Privates VPN aktiviert</strong><small>Tailscale, WireGuard oder internes VPN</small></span></label>
+          <div class="form-actions span-2"><button class="button" type="submit">Speichern</button></div>
         </form>
       </section>
 
       <section class="settings-section" id="collectors">
-        <div class="section-copy">
-          <p class="label">Collector</p>
-          <h2>Datenquellen</h2>
-          <p class="muted">Aktiviere nur die Endpunkte, die du tatsächlich verwenden möchtest.</p>
-        </div>
-        <form class="settings-card stack" method="post" action="/settings/collectors">
-          <label class="toggle-card">
-            <input type="checkbox" name="crowdsec_enabled" {% if config.crowdsec_enabled %}checked{% endif %}>
-            <span><strong>CrowdSec Webhook</strong><small><code>POST /api/v1/crowdsec</code></small></span>
-            <em class="state {% if config.crowdsec_enabled %}state-on{% endif %}">{% if config.crowdsec_enabled %}Aktiv{% else %}Aus{% endif %}</em>
-          </label>
-          <label class="toggle-card">
-            <input type="checkbox" name="generic_events_enabled" {% if config.generic_events_enabled %}checked{% endif %}>
-            <span><strong>Allgemeine Ereignis-API</strong><small><code>POST /api/v1/events</code></small></span>
-            <em class="state {% if config.generic_events_enabled %}state-on{% endif %}">{% if config.generic_events_enabled %}Aktiv{% else %}Aus{% endif %}</em>
-          </label>
-          <div class="coming-grid">
-            <div class="coming-card"><strong>OPNsense API</strong><small>Geplant</small></div>
-            <div class="coming-card"><strong>Fail2ban</strong><small>Geplant</small></div>
-            <div class="coming-card"><strong>Syslog</strong><small>Geplant</small></div>
-          </div>
-          <div class="form-actions"><button class="button" type="submit">Collector speichern</button></div>
-        </form>
-      </section>
-
-      <section class="settings-section" id="notifications">
-        <div class="section-copy">
-          <p class="label">Benachrichtigungen</p>
-          <h2>Alarmierung</h2>
-          <p class="muted">Eine Auswahl gilt erst als konfiguriert, wenn auch ein Ziel hinterlegt wurde.</p>
-        </div>
-        <form class="settings-card form-grid" method="post" action="/settings/notifications">
-          <label class="field">Anbieter
-            <select name="notification_provider" id="notification-provider">
-              <option value="none" {% if config.notification_provider == 'none' %}selected{% endif %}>Keine</option>
-              <option value="discord" {% if config.notification_provider == 'discord' %}selected{% endif %}>Discord</option>
-              <option value="telegram" {% if config.notification_provider == 'telegram' %}selected{% endif %}>Telegram</option>
-              <option value="email" {% if config.notification_provider == 'email' %}selected{% endif %}>E-Mail</option>
-              <option value="pushover" {% if config.notification_provider == 'pushover' %}selected{% endif %}>Pushover</option>
-            </select>
-          </label>
-          <label class="field">Ziel / Webhook
-            <input name="notification_target" value="{{ config.notification_target }}" placeholder="Noch nicht konfiguriert" autocomplete="off">
-          </label>
-          <div class="notification-status span-2 {% if config.notification_provider != 'none' and config.notification_target %}configured{% endif %}">
-            <span></span>
-            {% if config.notification_provider != 'none' and config.notification_target %}
-              {{ config.notification_provider|capitalize }} ist konfiguriert.
-            {% else %}
-              Benachrichtigungen sind noch nicht vollständig konfiguriert.
-            {% endif %}
-          </div>
-          <div class="form-actions span-2">
-            <button class="button" type="submit">Benachrichtigungen speichern</button>
-            <button class="button secondary" type="button" disabled>Test senden · folgt</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="settings-section" id="api">
-        <div class="section-copy">
-          <p class="label">API</p>
-          <h2>Ingest-Token</h2>
-          <p class="muted">Dieser Schlüssel authentifiziert alle eingehenden Security-Ereignisse.</p>
-        </div>
+        <div class="section-copy"><p class="label">Collector Framework</p><h2>OPNsense und Server anbinden</h2><p class="muted">Collector bleiben im persistenten Datenverzeichnis gespeichert und überstehen Updates.</p></div>
         <div class="settings-card stack">
-          <div class="secret-panel">
-            <div>
-              <small>Aktueller Token</small>
-              <code id="token-value" data-token="{{ config.ingest_token }}">{{ masked_token }}</code>
-            </div>
-            <div class="secret-actions">
-              <button type="button" class="button secondary" id="reveal-token">Anzeigen</button>
-              <button type="button" class="button secondary" id="copy-token">Kopieren</button>
-            </div>
+          <form class="stack" method="post" action="/settings/collectors">
+            <label class="toggle-card"><input type="checkbox" name="crowdsec_enabled" {% if config.crowdsec_enabled %}checked{% endif %}><span><strong>CrowdSec-Empfang</strong><small><code>POST /api/v1/crowdsec</code></small></span><em class="state {% if config.crowdsec_enabled %}state-on{% endif %}">{% if config.crowdsec_enabled %}Aktiv{% else %}Aus{% endif %}</em></label>
+            <label class="toggle-card"><input type="checkbox" name="generic_events_enabled" {% if config.generic_events_enabled %}checked{% endif %}><span><strong>Allgemeine Ereignis-API</strong><small><code>POST /api/v1/events</code></small></span><em class="state {% if config.generic_events_enabled %}state-on{% endif %}">{% if config.generic_events_enabled %}Aktiv{% else %}Aus{% endif %}</em></label>
+            <div class="form-actions"><button class="button secondary" type="submit">Endpunkte speichern</button></div>
+          </form>
+
+          <div class="collector-list">
+            {% for collector in config.collectors %}
+            <article class="collector-card">
+              <div class="collector-main"><span class="collector-icon">{% if collector.type == 'opnsense' %}FW{% elif collector.type == 'linux' %}LX{% elif collector.type == 'crowdsec' %}CS{% else %}IN{% endif %}</span><div><strong>{{ collector.name }}</strong><small>{{ collector.type }} · {{ collector.host }}{% if collector.port %}:{{ collector.port }}{% endif %}</small></div></div>
+              <span class="state {% if collector.status == 'reachable' %}state-on{% elif collector.status == 'unreachable' %}state-error{% endif %}">{% if collector.status == 'reachable' %}Erreichbar{% elif collector.status == 'unreachable' %}Nicht erreichbar{% else %}Nicht getestet{% endif %}</span>
+              {% if collector.last_error %}<p class="collector-error">{{ collector.last_error }}</p>{% endif %}
+              <div class="collector-actions"><form method="post" action="/settings/collectors/{{ collector.id }}/test"><button class="button secondary" type="submit">Verbindung testen</button></form><form method="post" action="/settings/collectors/{{ collector.id }}/delete" onsubmit="return confirm('Collector wirklich entfernen?')"><button class="button danger" type="submit">Entfernen</button></form></div>
+            </article>
+            {% else %}<div class="empty-state"><strong>Noch keine Collector angelegt</strong><p>Lege OPNsense und den VPS unten an. Der erste Test prüft die Erreichbarkeit über das private Netzwerk.</p></div>{% endfor %}
           </div>
-          <div class="endpoint-list">
-            <div><span>CrowdSec</span><code>POST /api/v1/crowdsec</code></div>
-            <div><span>Allgemeine Ereignisse</span><code>POST /api/v1/events</code></div>
-            <div><span>Healthcheck</span><code>GET /health</code></div>
-          </div>
-          <form method="post" action="/settings/token/rotate" id="rotate-token-form">
-            <button class="button danger" type="submit">Token neu erzeugen</button>
-            <p class="danger-note">Bestehende Quellen funktionieren danach erst wieder mit dem neuen Token.</p>
+
+          <form class="collector-add form-grid" method="post" action="/settings/collectors/add">
+            <div class="span-2"><p class="label">Collector hinzufügen</p><h3>Neue Verbindung</h3></div>
+            <label class="field">Typ<select name="collector_type"><option value="opnsense">OPNsense</option><option value="linux">Linux Server / VPS</option><option value="crowdsec">CrowdSec</option><option value="fail2ban">Fail2ban</option><option value="syslog">Syslog</option></select></label>
+            <label class="field">Anzeigename<input name="name" placeholder="Zum Beispiel Firewall" required maxlength="80"></label>
+            <label class="field">Hostname oder private IP<input name="host" placeholder="Tailscale-IP oder Hostname" required maxlength="255" autocomplete="off"></label>
+            <label class="field">Port<input name="port" type="number" min="0" max="65535" value="0"><small>0 = Standard: OPNsense 443, Linux 22</small></label>
+            <div class="form-actions span-2"><button class="button" type="submit">Collector hinzufügen</button></div>
           </form>
         </div>
       </section>
 
-      <section class="settings-section" id="security">
-        <div class="section-copy">
-          <p class="label">Sicherheit</p>
-          <h2>Lokaler Schutz</h2>
-          <p class="muted">Aktueller Sicherheitsstatus dieser Installation.</p>
-        </div>
-        <div class="settings-card security-grid">
-          <div><span class="security-icon">✓</span><strong>Secrets lokal erzeugt</strong><small>Keine Geheimnisse in Docker oder GitHub</small></div>
-          <div><span class="security-icon">✓</span><strong>Konfiguration geschützt</strong><small><code>/data/config.json</code> mit restriktiven Rechten</small></div>
-          <div><span class="security-icon">✓</span><strong>Token-authentifizierte API</strong><small>Header <code>X-Sentinel-Token</code></small></div>
-          <div><span class="security-icon warn">!</span><strong>Kein öffentlicher Zugriff</strong><small>Nur über vertrauenswürdiges LAN oder VPN bereitstellen</small></div>
-        </div>
-      </section>
+      <section class="settings-section" id="notifications"><div class="section-copy"><p class="label">Benachrichtigungen</p><h2>Alarmierung</h2><p class="muted">Eine Auswahl gilt erst mit einem hinterlegten Ziel als konfiguriert.</p></div><form class="settings-card form-grid" method="post" action="/settings/notifications"><label class="field">Anbieter<select name="notification_provider"><option value="none" {% if config.notification_provider == 'none' %}selected{% endif %}>Keine</option><option value="discord" {% if config.notification_provider == 'discord' %}selected{% endif %}>Discord</option><option value="telegram" {% if config.notification_provider == 'telegram' %}selected{% endif %}>Telegram</option><option value="email" {% if config.notification_provider == 'email' %}selected{% endif %}>E-Mail</option><option value="pushover" {% if config.notification_provider == 'pushover' %}selected{% endif %}>Pushover</option></select></label><label class="field">Ziel / Webhook<input name="notification_target" value="{{ config.notification_target }}" placeholder="Noch nicht konfiguriert" autocomplete="off"></label><div class="form-actions span-2"><button class="button" type="submit">Speichern</button></div></form></section>
+
+      <section class="settings-section" id="api"><div class="section-copy"><p class="label">API</p><h2>Ingest-Token</h2><p class="muted">Authentifiziert alle eingehenden Security-Ereignisse.</p></div><div class="settings-card stack"><div class="secret-panel"><div><small>Aktueller Token</small><code id="token-value" data-token="{{ config.ingest_token }}">{{ masked_token }}</code></div><div class="secret-actions"><button type="button" class="button secondary" id="reveal-token">Anzeigen</button><button type="button" class="button secondary" id="copy-token">Kopieren</button></div></div><form method="post" action="/settings/token/rotate" id="rotate-token-form"><button class="button danger" type="submit">Token neu erzeugen</button><p class="danger-note">Bestehende Quellen benötigen danach den neuen Token.</p></form></div></section>
+
+      <section class="settings-section" id="security"><div class="section-copy"><p class="label">Sicherheit</p><h2>Update-fähige Installation</h2><p class="muted">Version v{{ version }} · Konfigurationsschema {{ config.config_version }}</p></div><div class="settings-card security-grid"><div><span class="security-icon">✓</span><strong>Automatische Migrationen</strong><small>Bestehende <code>config.json</code> wird beim Start erweitert</small></div><div><span class="security-icon">✓</span><strong>Persistente Daten</strong><small><code>/data</code> bleibt bei Container-Updates erhalten</small></div><div><span class="security-icon">✓</span><strong>Lokale Secrets</strong><small>Keine Geheimnisse im Image oder Repository</small></div><div><span class="security-icon warn">!</span><strong>Nur privat bereitstellen</strong><small>LAN oder VPN, keine öffentliche Portfreigabe</small></div></div></section>
     </section>
   </main>
-
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <dialog class="confirm-dialog" id="rotate-dialog">
-    <h2>Ingest-Token wirklich ersetzen?</h2>
-    <p>Alle bestehenden Datenquellen verlieren sofort den Zugriff. Du musst den neuen Token anschließend überall hinterlegen.</p>
-    <div class="form-actions">
-      <button class="button secondary" type="button" id="cancel-rotate">Abbrechen</button>
-      <button class="button danger" type="button" id="confirm-rotate">Token ersetzen</button>
-    </div>
-  </dialog>
-
-  <script>
-    const tokenNode = document.getElementById('token-value');
-    const realToken = tokenNode.dataset.token;
-    const maskedToken = tokenNode.textContent;
-    const revealButton = document.getElementById('reveal-token');
-    const copyButton = document.getElementById('copy-token');
-    const toast = document.getElementById('toast');
-    let visible = false;
-
-    function showToast(message, error = false) {
-      toast.textContent = message;
-      toast.classList.toggle('toast-error', error);
-      toast.classList.add('show');
-      window.setTimeout(() => toast.classList.remove('show'), 2400);
-    }
-
-    revealButton.addEventListener('click', () => {
-      visible = !visible;
-      tokenNode.textContent = visible ? realToken : maskedToken;
-      revealButton.textContent = visible ? 'Ausblenden' : 'Anzeigen';
-    });
-
-    copyButton.addEventListener('click', async () => {
-      try {
-        if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(realToken);
-        } else {
-          const area = document.createElement('textarea');
-          area.value = realToken;
-          area.style.position = 'fixed';
-          area.style.opacity = '0';
-          document.body.appendChild(area);
-          area.focus();
-          area.select();
-          if (!document.execCommand('copy')) throw new Error('copy failed');
-          area.remove();
-        }
-        showToast('Token wurde kopiert.');
-      } catch (error) {
-        showToast('Kopieren fehlgeschlagen. Token bitte einblenden und manuell kopieren.', true);
-      }
-    });
-
-    const rotateForm = document.getElementById('rotate-token-form');
-    const rotateDialog = document.getElementById('rotate-dialog');
-    rotateForm.addEventListener('submit', event => {
-      event.preventDefault();
-      rotateDialog.showModal();
-    });
-    document.getElementById('cancel-rotate').addEventListener('click', () => rotateDialog.close());
-    document.getElementById('confirm-rotate').addEventListener('click', () => rotateForm.submit());
-
-    const serverToggle = document.getElementById('settings-server-enabled');
-    const serverWrap = document.getElementById('settings-server-name-wrap');
-    serverToggle.addEventListener('change', () => serverWrap.classList.toggle('hidden', !serverToggle.checked));
-  </script>
-</body>
-</html>
+  <div class="toast" id="toast"></div>
+  <dialog class="confirm-dialog" id="rotate-dialog"><h2>Ingest-Token wirklich ersetzen?</h2><p>Alle bestehenden Datenquellen verlieren sofort den Zugriff.</p><div class="form-actions"><button class="button secondary" type="button" id="cancel-rotate">Abbrechen</button><button class="button danger" type="button" id="confirm-rotate">Token ersetzen</button></div></dialog>
+<script>
+const tokenNode=document.getElementById('token-value'),realToken=tokenNode.dataset.token,maskedToken=tokenNode.textContent,toast=document.getElementById('toast');let visible=false;
+function showToast(m,e=false){toast.textContent=m;toast.classList.toggle('toast-error',e);toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2400)}
+document.getElementById('reveal-token').onclick=()=>{visible=!visible;tokenNode.textContent=visible?realToken:maskedToken;document.getElementById('reveal-token').textContent=visible?'Ausblenden':'Anzeigen'};
+document.getElementById('copy-token').onclick=async()=>{try{if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(realToken);else{const a=document.createElement('textarea');a.value=realToken;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();if(!document.execCommand('copy'))throw Error();a.remove()}showToast('Token wurde kopiert.')}catch(e){showToast('Kopieren fehlgeschlagen.',true)}};
+const rf=document.getElementById('rotate-token-form'),rd=document.getElementById('rotate-dialog');rf.onsubmit=e=>{e.preventDefault();rd.showModal()};document.getElementById('cancel-rotate').onclick=()=>rd.close();document.getElementById('confirm-rotate').onclick=()=>rf.submit();
+const st=document.getElementById('settings-server-enabled'),sw=document.getElementById('settings-server-name-wrap');st.onchange=()=>sw.classList.toggle('hidden',!st.checked);
+</script>
+</body></html>
