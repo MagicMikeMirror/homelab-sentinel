@@ -1,0 +1,10 @@
+.collector-list{display:grid;gap:12px;padding-top:8px;border-top:1px solid rgba(145,160,185,.13)}
+.collector-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:17px;border:1px solid #303b50;border-radius:16px;background:rgba(9,13,20,.62)}
+.collector-main{display:flex;align-items:center;gap:13px;min-width:0}.collector-main>div{display:grid;gap:4px;min-width:0}.collector-main small{color:var(--muted);overflow-wrap:anywhere}
+.collector-icon{width:42px;height:42px;display:grid;place-items:center;flex:0 0 auto;border-radius:13px;background:linear-gradient(135deg,rgba(101,121,248,.3),rgba(53,208,127,.22));border:1px solid rgba(111,130,255,.3);font-size:.78rem;font-weight:900}
+.collector-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}.collector-actions form{margin:0}.collector-actions .button{min-width:auto;min-height:38px;padding:0 13px;font-size:.84rem}
+.collector-error{grid-column:1/-1;margin:0;padding:10px 12px;border-radius:10px;background:rgba(255,100,124,.08);color:#ffb4c0;font-size:.82rem;overflow-wrap:anywhere}
+.state-error{color:#ffb4c0;background:rgba(255,100,124,.1)}
+.empty-state{padding:24px;border:1px dashed #344056;border-radius:16px;text-align:center;color:var(--muted)}.empty-state strong{display:block;color:var(--text);margin-bottom:7px}.empty-state p{margin:0;line-height:1.55}
+.collector-add{padding-top:22px;border-top:1px solid rgba(145,160,185,.13)}.collector-add h3{margin:0;font-size:1.35rem}.field small{color:var(--muted);font-weight:400}
+@media(max-width:680px){.collector-card{grid-template-columns:1fr}.collector-card>.state{justify-self:start}.collector-actions{justify-content:stretch}.collector-actions form,.collector-actions .button{width:100%}}
