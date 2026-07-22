@@ -2,18 +2,9 @@ name: homelab-sentinel
 
 services:
   app:
-    image: ghcr.io/magicmikemirror/homelab-sentinel:latest
+    image: ghcr.io/magicmikemirror/homelab-sentinel-app:latest
     container_name: homelab-sentinel
     restart: unless-stopped
-    environment:
-      APP_NAME: Homelab Sentinel
-      APP_ENV: production
-      SECRET_KEY: CHANGE_ME_TO_A_LONG_RANDOM_VALUE
-      INGEST_TOKEN: CHANGE_ME_TO_ANOTHER_LONG_RANDOM_VALUE
-      DATABASE_URL: sqlite:////data/sentinel.db
-      OPNSENSE_SOURCE_NAME: firewall
-      VPS_SOURCE_NAME: remote-server
-      RECENT_EVENT_LIMIT: 50
     ports:
       - "8088:8088"
     volumes:
