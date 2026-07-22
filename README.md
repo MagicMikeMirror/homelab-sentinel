@@ -2,19 +2,28 @@
 
 Lokales, datenschutzfreundliches Security-Dashboard für mehrere Homelab-Quellen.
 
-## Funktionsumfang
+## Version 0.5.0
 
 - einzelner, ZimaOS-freundlicher Container
-- persistente SQLite-Datenbank unter `/data`
-- automatischer Einrichtungsassistent beim ersten Start
-- automatische Erzeugung von Secret Key und Ingest-Token
-- CrowdSec-Empfang für Firewall- und Server-Quellen
-- allgemeine API für weitere Security-Ereignisse
-- API-Schutz über `X-Sentinel-Token`
+- persistente SQLite-Datenbank und Konfiguration unter `/data`
+- automatischer Einrichtungsassistent
+- automatisch erzeugte lokale Secrets
+- Collector Framework für OPNsense, Linux-Server, CrowdSec, Fail2ban und Syslog
+- Collector über die Weboberfläche hinzufügen, testen und entfernen
+- CrowdSec- und allgemeine Ereignis-API
 - Threat Score, Live-Ereignisliste und Quellenstatus
-- automatischer GHCR-Build
+- automatische Konfigurationsmigrationen bei Updates
+- versionierte GHCR-Images
 
-## Container-Image
+## Container-Images
+
+Stabile Version:
+
+```text
+ghcr.io/magicmikemirror/homelab-sentinel-app:0.5.0
+```
+
+Neueste stabile Version:
 
 ```text
 ghcr.io/magicmikemirror/homelab-sentinel-app:latest
@@ -22,12 +31,23 @@ ghcr.io/magicmikemirror/homelab-sentinel-app:latest
 
 ## Installation
 
-Für den ersten Start werden nur benötigt:
+Benötigt werden nur:
 
 - Port `8088` → `8088`
-- Speicher `/data`
+- dauerhaftes Volume auf `/data`
 
-Beim ersten Aufruf öffnet sich automatisch der Einrichtungsassistent. Secrets, Token, Datenbank und Grundeinstellungen werden lokal unter `/data` erzeugt. Es sind keine geheimen Umgebungsvariablen erforderlich.
+Beim ersten Aufruf öffnet sich der Einrichtungsassistent. Secrets, Token, Datenbank und Grundeinstellungen werden lokal unter `/data` erzeugt.
+
+## Aktualisierung
+
+Der Container kann aktualisiert werden, ohne die App-Daten zu löschen:
+
+1. vorhandenen Container stoppen
+2. neues Image mit demselben `/data`-Volume laden
+3. Container neu erstellen oder über die Host-Oberfläche aktualisieren
+4. Homelab Sentinel führt notwendige Konfigurationsmigrationen beim Start automatisch aus
+
+Solange dasselbe Host-Verzeichnis wieder auf `/data` eingebunden wird, bleiben Wizard-Konfiguration, Token, Datenbank und Collector erhalten.
 
 Die vollständige ZimaOS-Anleitung liegt unter `docs/ZIMAOS.md`.
 
@@ -35,5 +55,5 @@ Die vollständige ZimaOS-Anleitung liegt unter `docs/ZIMAOS.md`.
 
 - keine Portfreigabe ins Internet
 - Zugriff nur über ein vertrauenswürdiges LAN oder VPN
-- automatisch erzeugten Ingest-Token sicher behandeln
+- Ingest-Token sicher behandeln
 - keine echten IP-Adressen, Hostnamen, Domains oder Zugangsdaten committen
