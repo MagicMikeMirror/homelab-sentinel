@@ -1,10 +1,10 @@
 # ZimaOS GUI-Installation
 
-Homelab Sentinel läuft als einzelner Container.
+Homelab Sentinel läuft als einzelner Container und richtet sich beim ersten Start selbst ein.
 
 ## Grunddaten
 
-- Docker-Image: `ghcr.io/magicmikemirror/homelab-sentinel`
+- Docker-Image: `ghcr.io/magicmikemirror/homelab-sentinel-app`
 - Tag: `latest`
 - Titel: `Homelab Sentinel`
 - Netzwerk: `bridge`
@@ -24,18 +24,18 @@ Homelab Sentinel läuft als einzelner Container.
 
 ## Umgebungsvariablen
 
-| Name | Wert |
-|---|---|
-| `APP_NAME` | `Homelab Sentinel` |
-| `APP_ENV` | `production` |
-| `SECRET_KEY` | langer zufälliger Wert |
-| `INGEST_TOKEN` | anderer langer zufälliger Wert |
-| `DATABASE_URL` | `sqlite:////data/sentinel.db` |
-| `OPNSENSE_SOURCE_NAME` | `firewall` |
-| `VPS_SOURCE_NAME` | `remote-server` |
-| `RECENT_EVENT_LIMIT` | `50` |
+Keine erforderlich.
 
-`SECRET_KEY` und `INGEST_TOKEN` dürfen nicht identisch sein.
+Beim ersten Start erzeugt Homelab Sentinel automatisch:
+
+- Secret Key
+- Ingest-Token
+- SQLite-Datenbank
+- lokale Konfigurationsdatei
+
+Anschließend öffnet sich unter `http://<ZIMAOS-IP>:8088/` der Einrichtungsassistent. Dort werden Anzeigename, Quellen, privater VPN-Zugriff und gewünschte Benachrichtigungsart gewählt.
+
+Alle erzeugten Werte werden ausschließlich im eingebundenen Ordner `/data` gespeichert.
 
 ## Zugriff
 
