@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">SECURITY OPERATIONS</p>
+        <h1>{{ app_name }}</h1>
+        <p class="subtitle">Lokale Sicherheitsübersicht für mehrere Quellen.</p>
+      </div>
+      <div class="status"><span></span> System bereit</div>
+    </header>
+
+    <section class="grid">
+      <article class="card hero-card">
+        <p class="label">Threat Level</p>
+        <p class="threat">{{ threat_level }}</p>
+        <p class="muted">Score {{ threat_score }}/100</p>
+      </article>
+      <article class="card"><p class="label">Security Events</p><p class="metric">{{ total_events }}</p></article>
+      <article class="card"><p class="label">Aktive Quellen</p><p class="metric">{{ active_sources }}</p></article>
+      <article class="card"><p class="label">Angreifer-IP-Adressen</p><p class="metric">{{ unique_ips }}</p></article>
+    </section>
+
+    <section class="card section-card">
+      <p class="label">Quellen</p>
+      <div class="source-list">
+        {% for source in sources %}
+        <div class="source-row">
+          <div><strong>{{ source.name }}</strong><span>{{ source.kind }}</span></div>
+          <span class="source-status">{{ source.status }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="card section-card">
+      <p class="label">Letzte Ereignisse</p>
+      <div class="event-list">
+        {% for event in events %}
+        <div class="event-row">
+          <div><strong>{{ event.title }}</strong><span>{{ event.source.name }} · {{ event.seen_at }}</span></div>
+          <span class="severity severity-{{ event.severity }}">{{ event.severity }}</span>
+        </div>
+        {% else %}
+        <p class="muted">Noch keine Ereignisse gespeichert.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>
