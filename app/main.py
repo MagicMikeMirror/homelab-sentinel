@@ -2,8 +2,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import secrets
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, text
@@ -11,31 +11,41 @@ from sqlalchemy import select, text
 from app.config import settings
 from app.db import Base, SessionLocal, engine
 from app.models import SecurityEvent, Source
+from app.runtime_config import get_runtime_config, rotate_ingest_token, update_runtime_config
 from app.schemas import CrowdSecWebhook, EventIn
 from app.services import create_event, crowdsec_payload_to_events, dashboard_stats
+
+
+def sync_configured_sources() -> None:
+    config = get_runtime_config()
+    if not config["setup_complete"]:
+        return
+    configured = [(config["firewall_name"], "crowdsec-firewall")]
+    if config["server_enabled"]:
+        configured.append((config["server_name"], "crowdsec-server"))
+    with SessionLocal() as db:
+        for name, kind in configured:
+            if db.scalar(select(Source).where(Source.name == name)) is None:
+                db.add(Source(name=name, kind=kind))
+        db.commit()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
-    with SessionLocal() as db:
-        for name, kind in [
-            (settings.opnsense_source_name, "crowdsec-firewall"),
-            (settings.vps_source_name, "crowdsec-server"),
-        ]:
-            if db.scalar(select(Source).where(Source.name == name)) is None:
-                db.add(Source(name=name, kind=kind))
-        db.commit()
+    get_runtime_config()
+    sync_configured_sources()
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.3.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 
 def require_token(token: str | None) -> None:
-    if not token or not secrets.compare_digest(token, settings.ingest_token):
+    expected = get_runtime_config()["ingest_token"]
+    if not token or not secrets.compare_digest(token, expected):
         raise HTTPException(status_code=401, detail="Invalid ingest token")
 
 
@@ -45,13 +55,52 @@ def health() -> dict[str, str]:
         db.execute(text("SELECT 1"))
     return {
         "status": "ok",
-        "service": settings.app_name,
+        "service": get_runtime_config()["app_name"],
         "time": datetime.now(timezone.utc).isoformat(),
     }
 
 
+@app.get("/setup", response_class=HTMLResponse)
+def setup_page(request: Request):
+    config = get_runtime_config()
+    if config["setup_complete"]:
+        return RedirectResponse(url="/", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="setup.html",
+        context={"config": config},
+    )
+
+
+@app.post("/setup")
+def complete_setup(
+    app_name: str = Form(default="Homelab Sentinel"),
+    firewall_name: str = Form(default="Firewall"),
+    server_enabled: str | None = Form(default=None),
+    server_name: str = Form(default="Remote Server"),
+    tailscale_enabled: str | None = Form(default=None),
+    notification_provider: str = Form(default="none"),
+):
+    update_runtime_config(
+        {
+            "setup_complete": True,
+            "app_name": app_name.strip() or "Homelab Sentinel",
+            "firewall_name": firewall_name.strip() or "Firewall",
+            "server_enabled": server_enabled == "on",
+            "server_name": server_name.strip() or "Remote Server",
+            "tailscale_enabled": tailscale_enabled == "on",
+            "notification_provider": notification_provider,
+        }
+    )
+    sync_configured_sources()
+    return RedirectResponse(url="/settings?welcome=1", status_code=303)
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
+    config = get_runtime_config()
+    if not config["setup_complete"]:
+        return RedirectResponse(url="/setup", status_code=303)
     with SessionLocal() as db:
         stats = dashboard_stats(db)
         sources = db.scalars(select(Source).order_by(Source.name)).all()
@@ -61,8 +110,26 @@ def dashboard(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"app_name": settings.app_name, "sources": sources, "events": recent_events, **stats},
+        context={"app_name": config["app_name"], "sources": sources, "events": recent_events, **stats},
     )
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, welcome: int = Query(default=0)):
+    config = get_runtime_config()
+    if not config["setup_complete"]:
+        return RedirectResponse(url="/setup", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="settings.html",
+        context={"config": config, "welcome": bool(welcome)},
+    )
+
+
+@app.post("/settings/token/rotate")
+def rotate_token():
+    rotate_ingest_token()
+    return RedirectResponse(url="/settings", status_code=303)
 
 
 @app.post("/api/v1/events", status_code=201)
