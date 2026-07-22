@@ -22,8 +22,8 @@
 
         <section class="wizard-step" data-step="2">
           <p class="eyebrow">QUELLEN</p>
-          <h2>Wie heißt deine Firewall?</h2>
-          <p class="subtitle">Der Name wird nur als Bezeichnung im Dashboard verwendet.</p>
+          <h2>Welche Systeme möchtest du überwachen?</h2>
+          <p class="subtitle">Die Namen werden ausschließlich als Bezeichnungen im Dashboard verwendet.</p>
           <label>Firewall-Name
             <input name="firewall_name" value="Firewall" required maxlength="80">
           </label>
@@ -34,29 +34,39 @@
         </section>
 
         <section class="wizard-step" data-step="3">
+          <p class="eyebrow">COLLECTOR</p>
+          <h2>Verwendest du CrowdSec?</h2>
+          <p class="subtitle">Sentinel kann CrowdSec-Alarme über einen geschützten Webhook empfangen.</p>
+          <label class="check-row"><input type="checkbox" name="crowdsec_enabled" checked> CrowdSec-Webhook aktivieren</label>
+          <div class="summary-box">Die genaue Anschlussadresse und dein persönlicher Token werden nach der Einrichtung angezeigt.</div>
+        </section>
+
+        <section class="wizard-step" data-step="4">
           <p class="eyebrow">ZUGRIFF</p>
           <h2>Privater Netzwerkzugriff</h2>
           <p class="subtitle">Homelab Sentinel sollte niemals direkt aus dem Internet erreichbar sein.</p>
           <label class="check-row"><input type="checkbox" name="tailscale_enabled"> Zugriff über Tailscale oder ein anderes privates VPN</label>
         </section>
 
-        <section class="wizard-step" data-step="4">
+        <section class="wizard-step" data-step="5">
           <p class="eyebrow">BENACHRICHTIGUNGEN</p>
-          <h2>Wie möchtest du später informiert werden?</h2>
-          <select name="notification_provider">
-            <option value="none">Vorerst keine</option>
-            <option value="discord">Discord</option>
-            <option value="telegram">Telegram</option>
-            <option value="email">E-Mail</option>
-            <option value="pushover">Pushover</option>
-          </select>
-          <p class="muted">Die Zugangsdaten werden erst nach der Einrichtung in den Einstellungen hinterlegt.</p>
+          <h2>Was möchtest du später einrichten?</h2>
+          <p class="subtitle">Die Auswahl reserviert nur den gewünschten Anbieter. Zugangsdaten werden erst danach in den Einstellungen gespeichert.</p>
+          <label>Anbieter
+            <select name="notification_provider">
+              <option value="none">Vorerst keine</option>
+              <option value="discord">Discord</option>
+              <option value="telegram">Telegram</option>
+              <option value="email">E-Mail</option>
+              <option value="pushover">Pushover</option>
+            </select>
+          </label>
         </section>
 
-        <section class="wizard-step" data-step="5">
+        <section class="wizard-step" data-step="6">
           <p class="eyebrow">FERTIG</p>
           <h2>Bereit für den Start</h2>
-          <p class="subtitle">Sentinel erzeugt einen eigenen Ingest-Token, speichert alle Einstellungen unter <code>/data</code> und zeigt dir anschließend die Anschlussdaten.</p>
+          <p class="subtitle">Sentinel speichert alle Einstellungen unter <code>/data</code> und zeigt dir anschließend direkt die Anschlussdaten für deine Quellen.</p>
           <div class="summary-box">Keine Secrets in Docker oder GitHub erforderlich.</div>
         </section>
 
@@ -88,7 +98,8 @@
   next.addEventListener('click', () => {
     const required = [...steps[current].querySelectorAll('[required]')];
     if (required.some(field => !field.reportValidity())) return;
-    current = Math.min(current + 1, steps.length - 1); render();
+    current = Math.min(current + 1, steps.length - 1);
+    render();
   });
   back.addEventListener('click', () => { current = Math.max(current - 1, 0); render(); });
   serverEnabled.addEventListener('change', () => serverNameWrap.classList.toggle('hidden', !serverEnabled.checked));
