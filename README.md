@@ -4,28 +4,31 @@ Local Security Operations Center (SOC) for homelabs.
 
 Homelab Sentinel collects security events from firewalls and servers, stores them locally, and presents them in a central dashboard. It is designed for private networks and VPN access without cloud accounts, telemetry, or public exposure.
 
-## Current release
+## Current development version
 
-`0.6.0` — First Real Security Data
+`0.8.0-dev.1` — CrowdSec Historical Import & Threat Intelligence
+
+Stable users should continue using the latest published stable release. Testers can use the `edge` container tag.
 
 ## Supported security sources
 
 - CrowdSec on Linux servers and VPS systems
 - CrowdSec on OPNsense
 - generic authenticated security-event ingestion
-- OPNsense and Linux collector definitions for private infrastructure
+- multiple OPNsense and Linux security-source definitions
 
 Homelab Sentinel is not intended for general resource monitoring, media applications, smart-home services, or uptime monitoring.
 
-## v0.6.0 highlights
+## v0.8 development highlights
 
-- native CrowdSec HTTP-notification endpoint
-- one endpoint per source: `/api/v1/crowdsec/{source}`
-- storage of scenario, attacker IP, country, message, severity, and raw alert data
-- local threat score and recent-event feed
+- native CrowdSec live-event ingestion
+- historical CrowdSec alert import through `/api/v1/crowdsec/{source}/import`
+- duplicate detection for repeated imports
+- multiple CrowdSec sources
+- dynamic source cards based only on received events
+- threat score, unique attackers, source countries, top scenarios, and top countries
 - persistent SQLite database and runtime configuration under `/data`
-- automatic configuration migration between container updates
-- versioned GitHub and GHCR releases
+- update-safe container workflow with stable and `edge` images
 
 ## Privacy and security
 
@@ -38,13 +41,19 @@ Homelab Sentinel is not intended for general resource monitoring, media applicat
 
 Use Homelab Sentinel only through a trusted LAN or private VPN such as Tailscale or WireGuard.
 
-## Container image
+## Container images
+
+Stable:
 
 ```text
-ghcr.io/magicmikemirror/homelab-sentinel-app:0.6.0
+ghcr.io/magicmikemirror/homelab-sentinel-app:latest
 ```
 
-The `latest` tag follows the newest stable release.
+Development testing:
+
+```text
+ghcr.io/magicmikemirror/homelab-sentinel-app:edge
+```
 
 ## Installation
 
@@ -54,13 +63,9 @@ Required container settings:
 - persistent host directory mapped to `/data`
 - no required environment variables
 
-The setup wizard creates the local configuration, database, secret key, and ingest token automatically.
+The setup wizard creates the local configuration, database, secret key, and ingest token automatically. The ZimaOS guide is available in `docs/ZIMAOS.md`.
 
-The ZimaOS guide is available in `docs/ZIMAOS.md`.
-
-## CrowdSec ingestion
-
-Use the source-specific endpoint shown in **Settings → Collector Framework**:
+## CrowdSec live ingestion
 
 ```text
 POST http://<SENTINEL-HOST>:8088/api/v1/crowdsec/<SOURCE-NAME>
@@ -68,24 +73,29 @@ X-Sentinel-Token: <GENERATED-TOKEN>
 Content-Type: application/json
 ```
 
-The body may be a native CrowdSec alert object or a list of CrowdSec alerts.
+## CrowdSec historical import
+
+Example for the last 30 days:
+
+```bash
+sudo cscli alerts list --since 30d --limit 0 -o json \
+  | curl -X POST \
+      http://<SENTINEL-HOST>:8088/api/v1/crowdsec/<SOURCE-NAME>/import \
+      -H "Content-Type: application/json" \
+      -H "X-Sentinel-Token: <GENERATED-TOKEN>" \
+      --data-binary @-
+```
+
+The response reports `found`, `imported`, and `skipped`. Repeating an import is safe because duplicates are skipped.
 
 ## Release policy
 
-A stable release is published only when:
-
-- `VERSION` matches the requested semantic version
-- the changelog contains a matching release section
-- the application version matches `VERSION`
-- Python compilation and application import succeed
-- the Docker image builds and publishes successfully
-- versioned and `latest` GHCR tags are written
-- a Git tag and GitHub Release are created
+Stable releases require matching version metadata, changelog notes, passing tests, successful Python compilation, a successful container build, versioned GHCR tags, a Git tag, and a GitHub Release.
 
 ## Roadmap
 
 - `0.6.0` — real CrowdSec ingestion
-- `0.7.0` — notifications and security insights
-- `0.8.0` — incident center
-- `0.9.0` — security automation
+- `0.7.0` — multi-source setup and usability
+- `0.8.0` — historical import and threat intelligence
+- `0.9.0` — notifications and incident workflows
 - `1.0.0` — stable release
