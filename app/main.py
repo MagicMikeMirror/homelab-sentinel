@@ -15,27 +15,18 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.db import Base, SessionLocal, engine
 from app.models import SecurityEvent, Source
-from app.runtime_config import (
-    add_collector,
-    delete_collector,
-    get_runtime_config,
-    rotate_ingest_token,
-    update_collector,
-    update_runtime_config,
-)
+from app.runtime_config import add_collector, delete_collector, get_runtime_config, rotate_ingest_token, update_collector, update_runtime_config
 from app.schemas import CrowdSecWebhook, EventIn
-from app.services import create_event, crowdsec_payload_to_events, dashboard_stats
+from app.services import create_event, crowdsec_payload_to_events, dashboard_stats, import_events
 
-APP_VERSION = "0.7.0-dev.1"
+APP_VERSION = "0.8.0-dev.1"
 
 
 def sync_configured_sources() -> None:
     config = get_runtime_config()
     if not config["setup_complete"]:
         return
-    configured = [(config["firewall_name"], "crowdsec-firewall")]
-    if config["server_enabled"]:
-        configured.append((config["server_name"], "crowdsec-server"))
+    configured = []
     for collector in config.get("collectors", []):
         if collector.get("enabled"):
             configured.append((collector.get("name", "Collector"), f"collector-{collector.get('type', 'generic')}"))
@@ -65,10 +56,15 @@ def require_token(token: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid ingest token")
 
 
-def store_crowdsec_events(source_name: str, payload: Any) -> dict[str, Any]:
+def parse_crowdsec_events(source_name: str, payload: Any) -> list[EventIn]:
     events = crowdsec_payload_to_events(source_name.strip() or "CrowdSec", payload)
     if not events:
         raise HTTPException(status_code=422, detail="No CrowdSec alerts found in payload")
+    return events
+
+
+def store_crowdsec_events(source_name: str, payload: Any) -> dict[str, Any]:
+    events = parse_crowdsec_events(source_name, payload)
     with SessionLocal() as db:
         ids = [create_event(db, event).id for event in events]
     return {"accepted": len(ids), "ids": ids, "source": source_name}
@@ -90,26 +86,8 @@ def setup_page(request: Request):
 
 
 @app.post("/setup")
-def complete_setup(
-    app_name: str = Form(default="Homelab Sentinel"),
-    firewall_name: str = Form(default="Firewall"),
-    server_enabled: str | None = Form(default=None),
-    server_name: str = Form(default="Remote Server"),
-    crowdsec_enabled: str | None = Form(default=None),
-    tailscale_enabled: str | None = Form(default=None),
-    notification_provider: str = Form(default="none"),
-    setup_collectors: str = Form(default="[]"),
-):
-    update_runtime_config({
-        "setup_complete": True,
-        "app_name": app_name.strip() or "Homelab Sentinel",
-        "firewall_name": firewall_name.strip() or "Firewall",
-        "server_enabled": server_enabled == "on",
-        "server_name": server_name.strip() or "Remote Server",
-        "crowdsec_enabled": crowdsec_enabled == "on",
-        "tailscale_enabled": tailscale_enabled == "on",
-        "notification_provider": notification_provider,
-    })
+def complete_setup(app_name: str = Form(default="Homelab Sentinel"), firewall_name: str = Form(default="Firewall"), server_enabled: str | None = Form(default=None), server_name: str = Form(default="Remote Server"), crowdsec_enabled: str | None = Form(default=None), tailscale_enabled: str | None = Form(default=None), notification_provider: str = Form(default="none"), setup_collectors: str = Form(default="[]")):
+    update_runtime_config({"setup_complete": True, "app_name": app_name.strip() or "Homelab Sentinel", "firewall_name": firewall_name.strip() or "Firewall", "server_enabled": server_enabled == "on", "server_name": server_name.strip() or "Remote Server", "crowdsec_enabled": crowdsec_enabled == "on", "tailscale_enabled": tailscale_enabled == "on", "notification_provider": notification_provider})
     try:
         collectors = json.loads(setup_collectors)
     except json.JSONDecodeError:
@@ -122,16 +100,8 @@ def complete_setup(
             if collector_type not in {"opnsense", "linux", "crowdsec", "fail2ban", "syslog"}:
                 continue
             name = str(item.get("name") or "Collector").strip()
-            if not name:
-                continue
-            add_collector({
-                "type": collector_type,
-                "name": name,
-                "host": item.get("host", ""),
-                "port": item.get("port", 0),
-                "username": item.get("username", ""),
-                "connection_mode": item.get("connection_mode", "webhook" if collector_type == "crowdsec" else "network"),
-            })
+            if name:
+                add_collector({"type": collector_type, "name": name, "host": item.get("host", ""), "port": item.get("port", 0), "username": item.get("username", ""), "connection_mode": item.get("connection_mode", "webhook" if collector_type == "crowdsec" else "network")})
     sync_configured_sources()
     return RedirectResponse(url="/settings?welcome=1", status_code=303)
 
@@ -143,14 +113,8 @@ def dashboard(request: Request):
         return RedirectResponse(url="/setup", status_code=303)
     with SessionLocal() as db:
         stats = dashboard_stats(db)
-        sources = db.scalars(select(Source).order_by(Source.name)).all()
-        events = db.scalars(
-            select(SecurityEvent)
-            .options(selectinload(SecurityEvent.source))
-            .order_by(SecurityEvent.seen_at.desc())
-            .limit(settings.recent_event_limit)
-        ).all()
-    return templates.TemplateResponse(request=request, name="dashboard.html", context={"app_name": config["app_name"], "version": APP_VERSION, "sources": sources, "events": events, "collectors": config.get("collectors", []), **stats})
+        events = db.scalars(select(SecurityEvent).options(selectinload(SecurityEvent.source)).order_by(SecurityEvent.seen_at.desc()).limit(settings.recent_event_limit)).all()
+    return templates.TemplateResponse(request=request, name="dashboard.html", context={"app_name": config["app_name"], "version": APP_VERSION, "events": events, "collectors": config.get("collectors", []), **stats})
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -251,10 +215,21 @@ def ingest_native_crowdsec(source_name: str, payload: Any = Body(...), x_sentine
     return store_crowdsec_events(source_name, payload)
 
 
+@app.post("/api/v1/crowdsec/{source_name}/import")
+def import_crowdsec_history(source_name: str, payload: Any = Body(...), x_sentinel_token: str | None = Header(default=None)):
+    if not get_runtime_config().get("crowdsec_enabled", True):
+        raise HTTPException(status_code=503, detail="CrowdSec ingestion is disabled")
+    require_token(x_sentinel_token)
+    events = parse_crowdsec_events(source_name, payload)
+    with SessionLocal() as db:
+        result = import_events(db, events)
+    return {**result, "source": source_name}
+
+
 @app.get("/api/v1/events")
 def list_events(source: str | None = Query(default=None), severity: str | None = Query(default=None), limit: int = Query(default=50, ge=1, le=500)):
     with SessionLocal() as db:
-        stmt = select(SecurityEvent).join(Source).order_by(SecurityEvent.seen_at.desc()).limit(limit)
+        stmt = select(SecurityEvent).options(selectinload(SecurityEvent.source)).join(Source).order_by(SecurityEvent.seen_at.desc()).limit(limit)
         if source:
             stmt = stmt.where(Source.name == source)
         if severity:
