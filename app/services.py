@@ -16,11 +16,26 @@ def get_or_create_source(db: Session, name: str, kind: str = "generic") -> Sourc
         source = Source(name=name, kind=kind, status="online")
         db.add(source)
         db.flush()
+    elif kind != "generic" and source.kind == "generic":
+        source.kind = kind
     return source
 
 
-def create_event(db: Session, event: EventIn) -> SecurityEvent:
-    source = get_or_create_source(db, event.source)
+def event_exists(db: Session, event: EventIn) -> bool:
+    seen_at = (event.seen_at or datetime.now(timezone.utc)).replace(tzinfo=None)
+    stmt = select(SecurityEvent.id).join(Source).where(
+        Source.name == event.source,
+        SecurityEvent.event_type == event.event_type,
+        SecurityEvent.scenario == event.scenario,
+        SecurityEvent.source_ip == event.source_ip,
+        SecurityEvent.seen_at == seen_at,
+    )
+    return db.scalar(stmt) is not None
+
+
+def create_event(db: Session, event: EventIn, *, commit: bool = True) -> SecurityEvent:
+    source_kind = "crowdsec" if event.event_type == "crowdsec_alert" else "generic"
+    source = get_or_create_source(db, event.source, source_kind)
     row = SecurityEvent(
         source_id=source.id,
         event_type=event.event_type,
@@ -36,9 +51,25 @@ def create_event(db: Session, event: EventIn) -> SecurityEvent:
     db.add(row)
     source.status = "online"
     source.last_seen_at = datetime.utcnow()
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
+    else:
+        db.flush()
     return row
+
+
+def import_events(db: Session, events: list[EventIn]) -> dict[str, int]:
+    imported = 0
+    skipped = 0
+    for event in events:
+        if event_exists(db, event):
+            skipped += 1
+            continue
+        create_event(db, event, commit=False)
+        imported += 1
+    db.commit()
+    return {"found": len(events), "imported": imported, "skipped": skipped}
 
 
 def _extract_alerts(payload: Any) -> list[dict[str, Any]]:
@@ -78,7 +109,7 @@ def crowdsec_payload_to_events(source_name: str, payload: Any) -> list[EventIn]:
         if isinstance(source, dict):
             country = source.get("cn") or source.get("country")
         message = alert.get("message") or alert.get("description")
-        started_at = alert.get("start_at") or alert.get("created_at")
+        started_at = alert.get("start_at") or alert.get("created_at") or alert.get("stop_at")
         seen_at = None
         if isinstance(started_at, str):
             try:
@@ -104,19 +135,40 @@ def crowdsec_payload_to_events(source_name: str, payload: Any) -> list[EventIn]:
 
 def dashboard_stats(db: Session) -> dict[str, Any]:
     total = db.scalar(select(func.count(SecurityEvent.id))) or 0
-    active_sources = db.scalar(select(func.count(Source.id)).where(Source.status == "online")) or 0
-    unique_ips = db.scalar(
-        select(func.count(func.distinct(SecurityEvent.source_ip))).where(SecurityEvent.source_ip.is_not(None))
-    ) or 0
-    severity_rows = db.execute(
-        select(SecurityEvent.severity, func.count(SecurityEvent.id)).group_by(SecurityEvent.severity)
-    ).all()
+    active_sources = db.scalar(select(func.count(Source.id)).where(Source.last_seen_at.is_not(None))) or 0
+    unique_ips = db.scalar(select(func.count(func.distinct(SecurityEvent.source_ip))).where(SecurityEvent.source_ip.is_not(None))) or 0
+    countries = db.scalar(select(func.count(func.distinct(SecurityEvent.country))).where(SecurityEvent.country.is_not(None))) or 0
+    severity_rows = db.execute(select(SecurityEvent.severity, func.count(SecurityEvent.id)).group_by(SecurityEvent.severity)).all()
     threat_score = min(100, sum(SEVERITY_WEIGHTS.get(level, 1) * count for level, count in severity_rows))
     threat_level = "CRITICAL" if threat_score >= 70 else "HIGH" if threat_score >= 40 else "MEDIUM" if threat_score >= 15 else "LOW"
+    top_scenarios = db.execute(
+        select(SecurityEvent.scenario, func.count(SecurityEvent.id).label("count"))
+        .where(SecurityEvent.scenario.is_not(None))
+        .group_by(SecurityEvent.scenario)
+        .order_by(func.count(SecurityEvent.id).desc())
+        .limit(8)
+    ).all()
+    top_countries = db.execute(
+        select(SecurityEvent.country, func.count(SecurityEvent.id).label("count"))
+        .where(SecurityEvent.country.is_not(None))
+        .group_by(SecurityEvent.country)
+        .order_by(func.count(SecurityEvent.id).desc())
+        .limit(8)
+    ).all()
+    source_stats = db.execute(
+        select(Source.name, Source.kind, Source.status, Source.last_seen_at, func.count(SecurityEvent.id).label("count"))
+        .join(SecurityEvent, SecurityEvent.source_id == Source.id)
+        .group_by(Source.id)
+        .order_by(func.count(SecurityEvent.id).desc())
+    ).all()
     return {
         "total_events": total,
         "active_sources": active_sources,
         "unique_ips": unique_ips,
+        "countries": countries,
         "threat_score": threat_score,
         "threat_level": threat_level,
+        "top_scenarios": top_scenarios,
+        "top_countries": top_countries,
+        "source_stats": source_stats,
     }
