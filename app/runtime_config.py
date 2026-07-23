@@ -7,7 +7,7 @@ from typing import Any
 
 CONFIG_PATH = Path(os.getenv("SENTINEL_CONFIG_PATH", "/data/config.json"))
 _LOCK = RLock()
-CURRENT_CONFIG_VERSION = 2
+CURRENT_CONFIG_VERSION = 3
 _DEFAULTS: dict[str, Any] = {
     "config_version": CURRENT_CONFIG_VERSION,
     "setup_complete": False,
@@ -30,12 +30,22 @@ def _new_secrets() -> dict[str, str]:
 
 def _migrate(data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     changed = False
-    if int(data.get("config_version", 1)) < 2:
+    version = int(data.get("config_version", 1))
+    if version < 2:
         data.setdefault("collectors", [])
-        data["config_version"] = 2
+        version = 2
         changed = True
     if not isinstance(data.get("collectors"), list):
         data["collectors"] = []
+        changed = True
+    if version < 3:
+        for collector in data["collectors"]:
+            collector.setdefault("username", "")
+            collector.setdefault("connection_mode", "webhook" if collector.get("type") == "crowdsec" else "network")
+        version = 3
+        changed = True
+    if data.get("config_version") != CURRENT_CONFIG_VERSION:
+        data["config_version"] = CURRENT_CONFIG_VERSION
         changed = True
     return data, changed
 
@@ -84,6 +94,8 @@ def add_collector(values: dict[str, Any]) -> dict[str, Any]:
             "name": str(values.get("name") or "Collector").strip()[:80],
             "host": str(values.get("host") or "").strip()[:255],
             "port": int(values.get("port") or 0),
+            "username": str(values.get("username") or "").strip()[:120],
+            "connection_mode": str(values.get("connection_mode") or "network").strip()[:40],
             "enabled": True,
             "status": "not_tested",
             "last_error": "",
