@@ -30,13 +30,16 @@ jobs:
           grep -q "## \[$requested\]" CHANGELOG.md || { echo "CHANGELOG entry missing"; exit 1; }
           grep -q "$requested" README.md || { echo "README version reference missing"; exit 1; }
 
-      - name: Validate source
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check -q -r requirements-dev.txt
+
+      - name: Validate source and tests
         shell: bash
         run: |
           set -euo pipefail
-          python -m compileall -q app
-          python -m pip install --disable-pip-version-check -q -r requirements.txt
+          python -m compileall -q app tests
           python -c "from app.main import app; assert app.version == '${{ inputs.version }}'"
+          pytest -q
           ! grep -RInE '<<<<<<<|=======|>>>>>>>' --exclude-dir=.git .
 
       - name: Prepare image name
