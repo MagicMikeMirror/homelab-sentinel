@@ -11,63 +11,60 @@
     <section class="wizard-card">
       <div class="wizard-progress"><span id="progress-bar"></span></div>
       <form method="post" action="/setup" id="setup-form">
+        <input type="hidden" name="setup_collectors" id="setup-collectors" value="[]">
+
         <section class="wizard-step active" data-step="1">
           <p class="eyebrow">WILLKOMMEN</p>
           <h1>Homelab Sentinel</h1>
-          <p class="subtitle">Deine lokale Sicherheitszentrale wird in wenigen Schritten eingerichtet. Geheimnisse und Datenbank wurden bereits automatisch erstellt.</p>
-          <label>Anzeigename
-            <input name="app_name" value="Homelab Sentinel" required maxlength="80">
-          </label>
+          <p class="subtitle">Richte deine lokale Sicherheitszentrale ohne Docker-Geheimnisse oder manuelle Konfigurationsdateien ein.</p>
+          <label>Anzeigename<input name="app_name" value="Homelab Sentinel" required maxlength="80"></label>
         </section>
 
         <section class="wizard-step" data-step="2">
-          <p class="eyebrow">QUELLEN</p>
-          <h2>Welche Systeme möchtest du überwachen?</h2>
-          <p class="subtitle">Die Namen werden ausschließlich als Bezeichnungen im Dashboard verwendet.</p>
-          <label>Firewall-Name
-            <input name="firewall_name" value="Firewall" required maxlength="80">
-          </label>
-          <label class="check-row"><input type="checkbox" name="server_enabled" id="server-enabled"> Zusätzlich einen entfernten Server verwenden</label>
-          <label id="server-name-wrap" class="hidden">Server-Name
-            <input name="server_name" value="Remote Server" maxlength="80">
-          </label>
+          <p class="eyebrow">AUSWAHL</p>
+          <h2>Was möchtest du überwachen?</h2>
+          <p class="subtitle">Wähle nur sicherheitsbezogene Quellen. Weitere Systeme können später jederzeit ergänzt werden.</p>
+          <label class="check-row"><input type="checkbox" id="watch-crowdsec" name="crowdsec_enabled" checked> CrowdSec auf einer oder mehreren Quellen</label>
+          <label class="check-row"><input type="checkbox" id="watch-firewall" checked> Firewall / OPNsense</label>
+          <label class="check-row"><input type="checkbox" id="watch-linux"> Linux-Server oder VPS</label>
         </section>
 
         <section class="wizard-step" data-step="3">
-          <p class="eyebrow">COLLECTOR</p>
-          <h2>Verwendest du CrowdSec?</h2>
-          <p class="subtitle">Sentinel kann CrowdSec-Alarme über einen geschützten Webhook empfangen.</p>
-          <label class="check-row"><input type="checkbox" name="crowdsec_enabled" checked> CrowdSec-Webhook aktivieren</label>
-          <div class="summary-box">Die genaue Anschlussadresse und dein persönlicher Token werden nach der Einrichtung angezeigt.</div>
+          <p class="eyebrow">CROWDSEC</p>
+          <h2>Welche CrowdSec-Quellen gibt es?</h2>
+          <p class="subtitle">Du kannst mehrere Firewalls und Server hinzufügen. Host, Port und Benutzer dienen der späteren automatischen Einrichtung. Passwörter werden hier nicht gespeichert.</p>
+          <div id="collector-editor" class="stack"></div>
+          <button type="button" class="button secondary" id="add-source">Weitere Quelle hinzufügen</button>
+          <div class="summary-box">Für reinen Webhook-Empfang sind Host, Port und Benutzer optional. Sentinel erzeugt später pro Quelle eine eigene Anschlussadresse.</div>
         </section>
 
         <section class="wizard-step" data-step="4">
+          <p class="eyebrow">BEZEICHNUNGEN</p>
+          <h2>Wie sollen die Hauptsysteme heißen?</h2>
+          <p class="subtitle">Diese Namen erscheinen ausschließlich im Dashboard.</p>
+          <label>Firewall-Name<input name="firewall_name" value="Firewall" required maxlength="80"></label>
+          <label class="check-row"><input type="checkbox" name="server_enabled" id="server-enabled"> Einen Hauptserver zusätzlich hervorheben</label>
+          <label id="server-name-wrap" class="hidden">Server-Name<input name="server_name" value="Remote Server" maxlength="80"></label>
+        </section>
+
+        <section class="wizard-step" data-step="5">
           <p class="eyebrow">ZUGRIFF</p>
           <h2>Privater Netzwerkzugriff</h2>
           <p class="subtitle">Homelab Sentinel sollte niemals direkt aus dem Internet erreichbar sein.</p>
           <label class="check-row"><input type="checkbox" name="tailscale_enabled"> Zugriff über Tailscale oder ein anderes privates VPN</label>
         </section>
 
-        <section class="wizard-step" data-step="5">
+        <section class="wizard-step" data-step="6">
           <p class="eyebrow">BENACHRICHTIGUNGEN</p>
           <h2>Was möchtest du später einrichten?</h2>
-          <p class="subtitle">Die Auswahl reserviert nur den gewünschten Anbieter. Zugangsdaten werden erst danach in den Einstellungen gespeichert.</p>
-          <label>Anbieter
-            <select name="notification_provider">
-              <option value="none">Vorerst keine</option>
-              <option value="discord">Discord</option>
-              <option value="telegram">Telegram</option>
-              <option value="email">E-Mail</option>
-              <option value="pushover">Pushover</option>
-            </select>
-          </label>
+          <label>Anbieter<select name="notification_provider"><option value="none">Vorerst keine</option><option value="discord">Discord</option><option value="telegram">Telegram</option><option value="email">E-Mail</option><option value="pushover">Pushover</option></select></label>
         </section>
 
-        <section class="wizard-step" data-step="6">
+        <section class="wizard-step" data-step="7">
           <p class="eyebrow">FERTIG</p>
           <h2>Bereit für den Start</h2>
-          <p class="subtitle">Sentinel speichert alle Einstellungen unter <code>/data</code> und zeigt dir anschließend direkt die Anschlussdaten für deine Quellen.</p>
-          <div class="summary-box">Keine Secrets in Docker oder GitHub erforderlich.</div>
+          <p class="subtitle">Alle Quellen und Einstellungen werden persistent unter <code>/data</code> gespeichert und bleiben bei Updates erhalten.</p>
+          <div class="summary-box" id="setup-summary">Noch keine Quellen ausgewählt.</div>
         </section>
 
         <div class="wizard-actions">
@@ -79,31 +76,53 @@
     </section>
   </main>
 <script>
-  const steps = [...document.querySelectorAll('.wizard-step')];
-  const next = document.getElementById('next-button');
-  const back = document.getElementById('back-button');
-  const finish = document.getElementById('finish-button');
-  const progress = document.getElementById('progress-bar');
-  const serverEnabled = document.getElementById('server-enabled');
-  const serverNameWrap = document.getElementById('server-name-wrap');
-  let current = 0;
+const steps=[...document.querySelectorAll('.wizard-step')],next=document.getElementById('next-button'),back=document.getElementById('back-button'),finish=document.getElementById('finish-button'),progress=document.getElementById('progress-bar');
+const editor=document.getElementById('collector-editor'),hiddenCollectors=document.getElementById('setup-collectors'),summary=document.getElementById('setup-summary');
+const serverEnabled=document.getElementById('server-enabled'),serverNameWrap=document.getElementById('server-name-wrap');
+let current=0,sourceCounter=0;
 
-  function render() {
-    steps.forEach((step, index) => step.classList.toggle('active', index === current));
-    back.classList.toggle('hidden', current === 0);
-    next.classList.toggle('hidden', current === steps.length - 1);
-    finish.classList.toggle('hidden', current !== steps.length - 1);
-    progress.style.width = `${((current + 1) / steps.length) * 100}%`;
-  }
-  next.addEventListener('click', () => {
-    const required = [...steps[current].querySelectorAll('[required]')];
-    if (required.some(field => !field.reportValidity())) return;
-    current = Math.min(current + 1, steps.length - 1);
-    render();
-  });
-  back.addEventListener('click', () => { current = Math.max(current - 1, 0); render(); });
-  serverEnabled.addEventListener('change', () => serverNameWrap.classList.toggle('hidden', !serverEnabled.checked));
-  render();
+function sourceTemplate(values={}){
+  sourceCounter+=1;
+  const row=document.createElement('article');
+  row.className='settings-card form-grid setup-source-card';
+  row.dataset.sourceId=String(sourceCounter);
+  row.innerHTML=`
+    <label class="field">Typ<select data-field="type"><option value="crowdsec">CrowdSec</option><option value="opnsense">OPNsense / Firewall</option><option value="linux">Linux Server / VPS</option></select></label>
+    <label class="field">Anzeigename<input data-field="name" maxlength="80" placeholder="Zum Beispiel VPS CrowdSec" required></label>
+    <label class="field">IP-Adresse oder Tailnet-Hostname<input data-field="host" maxlength="255" placeholder="Optional für Webhook-Betrieb"></label>
+    <label class="field">Port<input data-field="port" type="number" min="0" max="65535" value="0"></label>
+    <label class="field">Benutzer<input data-field="username" maxlength="120" placeholder="Optional, z. B. für spätere SSH-Einrichtung"></label>
+    <label class="field">Verbindungsart<select data-field="connection_mode"><option value="webhook">Webhook</option><option value="ssh">SSH</option><option value="api">API</option></select></label>
+    <div class="form-actions span-2"><button type="button" class="button danger remove-source">Quelle entfernen</button></div>`;
+  for(const [key,value] of Object.entries(values)){const field=row.querySelector(`[data-field="${key}"]`);if(field)field.value=value;}
+  row.querySelector('.remove-source').onclick=()=>{row.remove();syncCollectors();};
+  row.querySelectorAll('input,select').forEach(field=>field.addEventListener('input',syncCollectors));
+  editor.appendChild(row);
+  syncCollectors();
+}
+
+function collectSources(){
+  return [...editor.querySelectorAll('.setup-source-card')].map(row=>({
+    type:row.querySelector('[data-field="type"]').value,
+    name:row.querySelector('[data-field="name"]').value.trim(),
+    host:row.querySelector('[data-field="host"]').value.trim(),
+    port:Number(row.querySelector('[data-field="port"]').value||0),
+    username:row.querySelector('[data-field="username"]').value.trim(),
+    connection_mode:row.querySelector('[data-field="connection_mode"]').value
+  })).filter(item=>item.name);
+}
+function syncCollectors(){const items=collectSources();hiddenCollectors.value=JSON.stringify(items);summary.textContent=items.length?`${items.length} Quelle${items.length===1?'':'n'} werden eingerichtet: ${items.map(item=>item.name).join(', ')}.`:'Noch keine Quellen ausgewählt.';}
+function render(){steps.forEach((step,index)=>step.classList.toggle('active',index===current));back.classList.toggle('hidden',current===0);next.classList.toggle('hidden',current===steps.length-1);finish.classList.toggle('hidden',current!==steps.length-1);progress.style.width=`${((current+1)/steps.length)*100}%`;if(current===steps.length-1)syncCollectors();}
+next.addEventListener('click',()=>{const required=[...steps[current].querySelectorAll('[required]')].filter(field=>field.offsetParent!==null);if(required.some(field=>!field.reportValidity()))return;current=Math.min(current+1,steps.length-1);render();});
+back.addEventListener('click',()=>{current=Math.max(current-1,0);render();});
+serverEnabled.addEventListener('change',()=>serverNameWrap.classList.toggle('hidden',!serverEnabled.checked));
+document.getElementById('add-source').onclick=()=>sourceTemplate({type:'crowdsec',name:`CrowdSec Quelle ${sourceCounter+1}`,connection_mode:'webhook'});
+document.getElementById('watch-firewall').addEventListener('change',event=>{if(event.target.checked&&!collectSources().some(item=>item.type==='opnsense'))sourceTemplate({type:'opnsense',name:'Firewall',connection_mode:'api'});});
+document.getElementById('watch-linux').addEventListener('change',event=>{if(event.target.checked&&!collectSources().some(item=>item.type==='linux'))sourceTemplate({type:'linux',name:'Linux Server',connection_mode:'ssh'});});
+document.getElementById('setup-form').addEventListener('submit',syncCollectors);
+sourceTemplate({type:'opnsense',name:'Firewall',connection_mode:'api'});
+sourceTemplate({type:'crowdsec',name:'CrowdSec',connection_mode:'webhook'});
+render();
 </script>
 </body>
 </html>
