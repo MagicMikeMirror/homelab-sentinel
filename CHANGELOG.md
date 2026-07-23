@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0-dev.1]
+
+- historischer CrowdSec-Import über `/api/v1/crowdsec/{source}/import`
+- Dublettenerkennung anhand Quelle, Szenario, Angreifer-IP und Zeitpunkt
+- wiederholbare Importe mit Ergebniswerten `found`, `imported` und `skipped`
+- dynamische Quellenanzeige nur für Quellen mit empfangenen Ereignissen
+- Threat-Intelligence-Kennzahlen für Angriffe, eindeutige Angreifer und Länder
+- Auswertung der häufigsten Szenarien und Herkunftsländer
+- mehrere CrowdSec-Quellen mit getrennten Quellnamen
+- Importanleitung direkt in der Einstellungsoberfläche
+- bestehende Datenbank, Konfiguration und Tokens bleiben beim Update erhalten
+
 ## [0.6.0]
 
 - nativer CrowdSec-Endpunkt für echte HTTP-Notifications
