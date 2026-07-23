@@ -11,6 +11,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,10 +24,16 @@ jobs:
       - name: Compile
         run: python -m compileall -q app tests
       - name: Test
-        run: pytest -q
+        run: python -m pytest -q
       - name: Verify application version
         run: |
           version="$(tr -d '[:space:]' < VERSION)"
           python -c "from app.main import app; assert app.version == '$version'"
       - name: Check conflict markers
-        run: "! grep -RInE '<<<<<<<|=======|>>>>>>>' --exclude-dir=.git ."
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE '^(<<<<<<<|=======|>>>>>>>)' -- . ':!.github/workflows/*'; then
+            echo "Conflict marker found"
+            exit 1
+          fi
