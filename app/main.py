@@ -2,8 +2,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import secrets
 import socket
+from typing import Any
 
-from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
+from fastapi import Body, FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -22,6 +23,8 @@ from app.runtime_config import (
 )
 from app.schemas import CrowdSecWebhook, EventIn
 from app.services import create_event, crowdsec_payload_to_events, dashboard_stats
+
+APP_VERSION = "0.6.0"
 
 
 def sync_configured_sources() -> None:
@@ -49,7 +52,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.5.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version=APP_VERSION, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -60,6 +63,15 @@ def require_token(token: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid ingest token")
 
 
+def store_crowdsec_events(source_name: str, payload: Any) -> dict[str, Any]:
+    events = crowdsec_payload_to_events(source_name.strip() or "CrowdSec", payload)
+    if not events:
+        raise HTTPException(status_code=422, detail="No CrowdSec alerts found in payload")
+    with SessionLocal() as db:
+        ids = [create_event(db, event).id for event in events]
+    return {"accepted": len(ids), "ids": ids, "source": source_name}
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     with SessionLocal() as db:
@@ -67,7 +79,7 @@ def health() -> dict[str, str]:
     return {
         "status": "ok",
         "service": get_runtime_config()["app_name"],
-        "version": app.version,
+        "version": APP_VERSION,
         "time": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -116,7 +128,7 @@ def dashboard(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"app_name": config["app_name"], "version": app.version, "sources": sources, "events": events, "collectors": config.get("collectors", []), **stats},
+        context={"app_name": config["app_name"], "version": APP_VERSION, "sources": sources, "events": events, "collectors": config.get("collectors", []), **stats},
     )
 
 
@@ -127,10 +139,11 @@ def settings_page(request: Request, welcome: int = Query(default=0), saved: str 
         return RedirectResponse(url="/setup", status_code=303)
     token = config["ingest_token"]
     masked_token = f"{'•' * max(len(token) - 8, 12)}{token[-8:]}"
+    base_url = str(request.base_url).rstrip("/")
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
-        context={"config": config, "version": app.version, "welcome": bool(welcome), "saved": saved, "masked_token": masked_token},
+        context={"config": config, "version": APP_VERSION, "welcome": bool(welcome), "saved": saved, "masked_token": masked_token, "base_url": base_url},
     )
 
 
@@ -148,7 +161,7 @@ def save_collector_settings(crowdsec_enabled: str | None = Form(default=None), g
 
 
 @app.post("/settings/collectors/add")
-def create_collector(collector_type: str = Form(...), name: str = Form(...), host: str = Form(...), port: int = Form(default=0)):
+def create_collector(collector_type: str = Form(...), name: str = Form(...), host: str = Form(default=""), port: int = Form(default=0)):
     if collector_type not in {"opnsense", "linux", "crowdsec", "fail2ban", "syslog"}:
         raise HTTPException(status_code=400, detail="Unsupported collector type")
     add_collector({"type": collector_type, "name": name, "host": host, "port": port})
@@ -163,7 +176,10 @@ def test_collector(collector_id: str):
     if collector is None:
         raise HTTPException(status_code=404, detail="Collector not found")
     host = collector.get("host", "")
-    port = int(collector.get("port") or (443 if collector.get("type") == "opnsense" else 22))
+    port = int(collector.get("port") or 0)
+    if not host or not port:
+        update_collector(collector_id, {"status": "waiting", "last_error": "Für einen Verbindungstest Host und Port eintragen."})
+        return RedirectResponse(url="/settings?saved=collector-tested#collectors", status_code=303)
     try:
         with socket.create_connection((host, port), timeout=4):
             pass
@@ -207,10 +223,19 @@ def ingest_crowdsec(webhook: CrowdSecWebhook, x_sentinel_token: str | None = Hea
     if not get_runtime_config().get("crowdsec_enabled", True):
         raise HTTPException(status_code=503, detail="CrowdSec ingestion is disabled")
     require_token(x_sentinel_token)
-    events = crowdsec_payload_to_events(webhook.source, webhook.payload)
-    with SessionLocal() as db:
-        ids = [create_event(db, event).id for event in events]
-    return {"accepted": len(ids), "ids": ids}
+    return store_crowdsec_events(webhook.source, webhook.payload)
+
+
+@app.post("/api/v1/crowdsec/{source_name}", status_code=202)
+def ingest_native_crowdsec(
+    source_name: str,
+    payload: Any = Body(...),
+    x_sentinel_token: str | None = Header(default=None),
+):
+    if not get_runtime_config().get("crowdsec_enabled", True):
+        raise HTTPException(status_code=503, detail="CrowdSec ingestion is disabled")
+    require_token(x_sentinel_token)
+    return store_crowdsec_events(source_name, payload)
 
 
 @app.get("/api/v1/events")
