@@ -18,6 +18,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
 
       - name: Validate release metadata
         shell: bash
@@ -25,27 +33,31 @@ jobs:
           set -euo pipefail
           requested="${{ inputs.version }}"
           current="$(tr -d '[:space:]' < VERSION)"
-          [[ "$requested" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid semantic version"; exit 1; }
+          [[ "$requested" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid semantic version: $requested"; exit 1; }
           [[ "$requested" == "$current" ]] || { echo "Requested version $requested does not match VERSION $current"; exit 1; }
-          grep -q "## \[$requested\]" CHANGELOG.md || { echo "CHANGELOG entry missing"; exit 1; }
-          grep -q "$requested" README.md || { echo "README version reference missing"; exit 1; }
+          grep -Fq "## [$requested]" CHANGELOG.md || { echo "CHANGELOG entry missing for $requested"; exit 1; }
+          grep -Fq "$requested" README.md || { echo "README version reference missing for $requested"; exit 1; }
 
-      - name: Install test dependencies
-        run: python -m pip install --disable-pip-version-check -q -r requirements-dev.txt
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt pytest
 
-      - name: Validate source and tests
+      - name: Run release checks
         shell: bash
         run: |
           set -euo pipefail
-          python -m compileall -q app tests
-          python -c "from app.main import app; assert app.version == '${{ inputs.version }}'"
+          python -m compileall -q app
           pytest -q
-          ! grep -RInE '<<<<<<<|=======|>>>>>>>' --exclude-dir=.git .
+          python -c "from app.main import app; assert app.version == '${{ inputs.version }}'"
+          if grep -RInE '<<<<<<<|=======|>>>>>>>' --exclude-dir=.git .; then
+            echo "Conflict marker found"
+            exit 1
+          fi
 
-      - name: Prepare image name
+      - name: Prepare lowercase image name
         id: image
         shell: bash
         run: |
+          set -euo pipefail
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           echo "name=ghcr.io/${owner}/homelab-sentinel-app" >> "$GITHUB_OUTPUT"
 
@@ -91,4 +103,5 @@ jobs:
             capture && /^## \[/ {exit}
             capture {print}
           ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md || { echo "Release notes are empty"; exit 1; }
           gh release create "$tag" --title "Homelab Sentinel $tag" --notes-file release-notes.md --verify-tag
