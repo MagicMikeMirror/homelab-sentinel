@@ -50,7 +50,7 @@ jobs:
           python -m compileall -q app
           python -m pytest -q
           python -c "from app.main import app; assert app.version == '${{ inputs.version }}'"
-          if grep -RInE '<<<<<<<|=======|>>>>>>>' --exclude-dir=.git .; then
+          if git grep -nE '^(<<<<<<<|=======|>>>>>>>)' -- . ':!.github/workflows/*'; then
             echo "Conflict marker found"
             exit 1
           fi
