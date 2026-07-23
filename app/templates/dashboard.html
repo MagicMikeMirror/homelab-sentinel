@@ -10,50 +10,45 @@
   <main class="shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">SECURITY OPERATIONS</p>
+        <p class="eyebrow">LOCAL SECURITY OPERATIONS CENTER</p>
         <h1>{{ app_name }}</h1>
-        <p class="subtitle">Lokale Sicherheitsübersicht für mehrere Quellen.</p>
+        <p class="subtitle">CrowdSec Live-Alarme, historische Angriffe und lokale Threat Intelligence.</p>
       </div>
-      <div class="header-actions">
-        <div class="status"><span></span> System bereit</div>
-        <a class="button secondary" href="/settings">Einstellungen</a>
-      </div>
+      <div class="header-actions"><div class="status"><span></span> System bereit · v{{ version }}</div><a class="button secondary" href="/settings">Einstellungen</a></div>
     </header>
 
     <section class="grid">
-      <article class="card hero-card">
-        <p class="label">Threat Level</p>
-        <p class="threat">{{ threat_level }}</p>
-        <p class="muted">Score {{ threat_score }}/100</p>
-      </article>
-      <article class="card"><p class="label">Security Events</p><p class="metric">{{ total_events }}</p></article>
-      <article class="card"><p class="label">Aktive Quellen</p><p class="metric">{{ active_sources }}</p></article>
-      <article class="card"><p class="label">Angreifer-IP-Adressen</p><p class="metric">{{ unique_ips }}</p></article>
+      <article class="card hero-card"><p class="label">Threat Level</p><p class="threat">{{ threat_level }}</p><p class="muted">Score {{ threat_score }}/100</p></article>
+      <article class="card"><p class="label">Angriffe gesamt</p><p class="metric">{{ total_events }}</p></article>
+      <article class="card"><p class="label">Eindeutige Angreifer</p><p class="metric">{{ unique_ips }}</p></article>
+      <article class="card"><p class="label">Herkunftsländer</p><p class="metric">{{ countries }}</p></article>
     </section>
 
-    <section class="card section-card">
-      <p class="label">Quellen</p>
-      <div class="source-list">
-        {% for source in sources %}
-        <div class="source-row">
-          <div><strong>{{ source.name }}</strong><span>{{ source.kind }}</span></div>
-          <span class="source-status">{{ source.status }}</span>
+    <section class="intel-grid">
+      <article class="card section-card">
+        <p class="label">Aktive Quellen</p>
+        <div class="source-list">
+          {% for source in source_stats %}
+          <div class="source-row"><div><strong>{{ source.name }}</strong><span>{{ source.count }} Ereignisse{% if source.last_seen_at %} · zuletzt {{ source.last_seen_at }}{% endif %}</span></div><span class="source-status">{{ source.status }}</span></div>
+          {% else %}<p class="muted">Noch keine Quelle hat Daten gesendet.</p>{% endfor %}
         </div>
-        {% endfor %}
-      </div>
+      </article>
+      <article class="card section-card">
+        <p class="label">Top Szenarien</p>
+        {% for scenario in top_scenarios %}<div class="rank-row"><span>{{ scenario.scenario }}</span><strong>{{ scenario.count }}</strong></div>{% else %}<p class="muted">Noch keine Szenarien vorhanden.</p>{% endfor %}
+      </article>
+      <article class="card section-card">
+        <p class="label">Top Länder</p>
+        {% for country in top_countries %}<div class="rank-row"><span>{{ country.country }}</span><strong>{{ country.count }}</strong></div>{% else %}<p class="muted">Noch keine Länderinformationen vorhanden.</p>{% endfor %}
+      </article>
     </section>
 
     <section class="card section-card">
       <p class="label">Letzte Ereignisse</p>
       <div class="event-list">
         {% for event in events %}
-        <div class="event-row">
-          <div><strong>{{ event.title }}</strong><span>{{ event.source.name }} · {{ event.seen_at }}</span></div>
-          <span class="severity severity-{{ event.severity }}">{{ event.severity }}</span>
-        </div>
-        {% else %}
-        <p class="muted">Noch keine Ereignisse gespeichert.</p>
-        {% endfor %}
+        <div class="event-row"><div><strong>{{ event.title }}</strong><span>{{ event.source.name }}{% if event.source_ip %} · {{ event.source_ip }}{% endif %}{% if event.country %} · {{ event.country }}{% endif %} · {{ event.seen_at }}</span></div><span class="severity severity-{{ event.severity }}">{{ event.severity }}</span></div>
+        {% else %}<p class="muted">Noch keine Ereignisse gespeichert.</p>{% endfor %}
       </div>
     </section>
   </main>
