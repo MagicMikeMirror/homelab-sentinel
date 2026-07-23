@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0-dev.2]
+
+- Threat Score und Threat Level basieren nur noch auf den letzten 24 Stunden
+- Gesamtstatistiken bleiben über den vollständigen Datenbestand erhalten
+- technische Quellnamen wie `server` und `firewall` werden auf konfigurierte Anzeigenamen abgebildet
+- Dashboard zeigt nur noch die letzten 15 Ereignisse
+- neue paginierte Ereignisübersicht mit Quellen- und Schweregradfilter
+- Trefferzahlen der häufigsten Szenarien und Länder werden deutlich dargestellt
+- Dublettenerkennung berücksichtigt zusätzlich bereits im selben Import enthaltene Duplikate
+- Live-Empfang und historische Importe verwenden dieselbe Quellnamensauflösung
+
 ## [0.8.0-dev.1]
 
 - historischer CrowdSec-Import über `/api/v1/crowdsec/{source}/import`
@@ -41,4 +52,4 @@
 - automatisch erzeugte lokale Secrets
 - Einstellungszentrale
 - CrowdSec- und allgemeine Ereignis-API
-- SQLite-Datenbank unter `/data`
+- SQLite-Datenbank unter `/data
