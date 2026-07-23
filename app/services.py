@@ -41,28 +41,61 @@ def create_event(db: Session, event: EventIn) -> SecurityEvent:
     return row
 
 
+def _extract_alerts(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("alerts", "payload", "data"):
+        nested = payload.get(key)
+        if isinstance(nested, list):
+            return [item for item in nested if isinstance(item, dict)]
+        if isinstance(nested, dict):
+            return [nested]
+    return [payload]
+
+
+def _severity(alert: dict[str, Any], decisions: list[Any]) -> str:
+    capacity = alert.get("capacity")
+    events_count = alert.get("events_count") or alert.get("eventsCount") or 0
+    if decisions and isinstance(capacity, (int, float)) and capacity >= 10:
+        return "critical"
+    if decisions:
+        return "high"
+    if isinstance(events_count, int) and events_count >= 5:
+        return "medium"
+    return "low"
+
+
 def crowdsec_payload_to_events(source_name: str, payload: Any) -> list[EventIn]:
-    alerts = payload if isinstance(payload, list) else [payload]
     events: list[EventIn] = []
-    for alert in alerts:
-        if not isinstance(alert, dict):
-            continue
+    for alert in _extract_alerts(payload):
         source = alert.get("source") or {}
         decisions = alert.get("decisions") or []
         scenario = alert.get("scenario") or alert.get("scenario_hash") or "crowdsec-alert"
         ip = source.get("ip") if isinstance(source, dict) else None
-        country = source.get("cn") if isinstance(source, dict) else None
-        severity = "high" if decisions else "medium"
+        country = None
+        if isinstance(source, dict):
+            country = source.get("cn") or source.get("country")
+        message = alert.get("message") or alert.get("description")
+        started_at = alert.get("start_at") or alert.get("created_at")
+        seen_at = None
+        if isinstance(started_at, str):
+            try:
+                seen_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            except ValueError:
+                seen_at = None
         events.append(
             EventIn(
                 source=source_name,
                 event_type="crowdsec_alert",
-                severity=severity,
+                severity=_severity(alert, decisions),
                 title=f"CrowdSec: {scenario}",
                 source_ip=ip,
                 country=country,
                 scenario=str(scenario),
-                message=alert.get("message"),
+                message=message,
+                seen_at=seen_at,
                 raw_data=alert,
             )
         )
