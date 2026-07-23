@@ -6,7 +6,7 @@ on:
       version:
         description: "Release version without leading v"
         required: true
-        default: "0.5.0"
+        default: "0.6.0"
 
 permissions:
   contents: write
@@ -19,16 +19,32 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Validate version
+      - name: Validate release metadata
         shell: bash
         run: |
           set -euo pipefail
           requested="${{ inputs.version }}"
           current="$(tr -d '[:space:]' < VERSION)"
-          if [[ "$requested" != "$current" ]]; then
-            echo "Requested version $requested does not match VERSION file $current"
-            exit 1
-          fi
+          [[ "$requested" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid semantic version"; exit 1; }
+          [[ "$requested" == "$current" ]] || { echo "Requested version $requested does not match VERSION $current"; exit 1; }
+          grep -q "## \[$requested\]" CHANGELOG.md || { echo "CHANGELOG entry missing"; exit 1; }
+          grep -q "$requested" README.md || { echo "README version reference missing"; exit 1; }
+
+      - name: Validate source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q app
+          python -m pip install --disable-pip-version-check -q -r requirements.txt
+          python -c "from app.main import app; assert app.version == '${{ inputs.version }}'"
+          ! grep -RInE '<<<<<<<|=======|>>>>>>>' --exclude-dir=.git .
+
+      - name: Prepare image name
+        id: image
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "name=ghcr.io/${owner}/homelab-sentinel-app" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -47,8 +63,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/homelab-sentinel-app:${{ inputs.version }}
-            ghcr.io/${{ github.repository_owner }}/homelab-sentinel-app:latest
+            ${{ steps.image.outputs.name }}:${{ inputs.version }}
+            ${{ steps.image.outputs.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -67,7 +83,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$tag" -m "Homelab Sentinel $tag"
           git push origin "$tag"
-          gh release create "$tag" \
-            --title "Homelab Sentinel $tag" \
-            --notes-file CHANGELOG.md \
-            --verify-tag
+          awk -v version="${{ inputs.version }}" '
+            $0 == "## [" version "]" {capture=1; next}
+            capture && /^## \[/ {exit}
+            capture {print}
+          ' CHANGELOG.md > release-notes.md
+          gh release create "$tag" --title "Homelab Sentinel $tag" --notes-file release-notes.md --verify-tag
