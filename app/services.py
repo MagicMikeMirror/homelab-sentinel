@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -62,10 +62,14 @@ def create_event(db: Session, event: EventIn, *, commit: bool = True) -> Securit
 def import_events(db: Session, events: list[EventIn]) -> dict[str, int]:
     imported = 0
     skipped = 0
+    batch_keys: set[tuple[Any, ...]] = set()
     for event in events:
-        if event_exists(db, event):
+        seen_at = (event.seen_at or datetime.now(timezone.utc)).replace(tzinfo=None)
+        key = (event.source, event.event_type, event.scenario, event.source_ip, seen_at)
+        if key in batch_keys or event_exists(db, event):
             skipped += 1
             continue
+        batch_keys.add(key)
         create_event(db, event, commit=False)
         imported += 1
     db.commit()
@@ -138,9 +142,17 @@ def dashboard_stats(db: Session) -> dict[str, Any]:
     active_sources = db.scalar(select(func.count(Source.id)).where(Source.last_seen_at.is_not(None))) or 0
     unique_ips = db.scalar(select(func.count(func.distinct(SecurityEvent.source_ip))).where(SecurityEvent.source_ip.is_not(None))) or 0
     countries = db.scalar(select(func.count(func.distinct(SecurityEvent.country))).where(SecurityEvent.country.is_not(None))) or 0
-    severity_rows = db.execute(select(SecurityEvent.severity, func.count(SecurityEvent.id)).group_by(SecurityEvent.severity)).all()
+
+    since = datetime.utcnow() - timedelta(hours=24)
+    severity_rows = db.execute(
+        select(SecurityEvent.severity, func.count(SecurityEvent.id))
+        .where(SecurityEvent.seen_at >= since)
+        .group_by(SecurityEvent.severity)
+    ).all()
+    recent_events = sum(count for _, count in severity_rows)
     threat_score = min(100, sum(SEVERITY_WEIGHTS.get(level, 1) * count for level, count in severity_rows))
     threat_level = "CRITICAL" if threat_score >= 70 else "HIGH" if threat_score >= 40 else "MEDIUM" if threat_score >= 15 else "LOW"
+
     top_scenarios = db.execute(
         select(SecurityEvent.scenario, func.count(SecurityEvent.id).label("count"))
         .where(SecurityEvent.scenario.is_not(None))
@@ -163,6 +175,7 @@ def dashboard_stats(db: Session) -> dict[str, Any]:
     ).all()
     return {
         "total_events": total,
+        "events_24h": recent_events,
         "active_sources": active_sources,
         "unique_ips": unique_ips,
         "countries": countries,
