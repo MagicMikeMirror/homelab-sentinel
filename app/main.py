@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import json
 import secrets
 import socket
 from typing import Any
@@ -24,7 +25,7 @@ from app.runtime_config import (
 from app.schemas import CrowdSecWebhook, EventIn
 from app.services import create_event, crowdsec_payload_to_events, dashboard_stats
 
-APP_VERSION = "0.6.0"
+APP_VERSION = "0.7.0-dev.1"
 
 
 def sync_configured_sources() -> None:
@@ -76,12 +77,7 @@ def store_crowdsec_events(source_name: str, payload: Any) -> dict[str, Any]:
 def health() -> dict[str, str]:
     with SessionLocal() as db:
         db.execute(text("SELECT 1"))
-    return {
-        "status": "ok",
-        "service": get_runtime_config()["app_name"],
-        "version": APP_VERSION,
-        "time": datetime.now(timezone.utc).isoformat(),
-    }
+    return {"status": "ok", "service": get_runtime_config()["app_name"], "version": APP_VERSION, "time": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/setup", response_class=HTMLResponse)
@@ -101,6 +97,7 @@ def complete_setup(
     crowdsec_enabled: str | None = Form(default=None),
     tailscale_enabled: str | None = Form(default=None),
     notification_provider: str = Form(default="none"),
+    setup_collectors: str = Form(default="[]"),
 ):
     update_runtime_config({
         "setup_complete": True,
@@ -112,6 +109,28 @@ def complete_setup(
         "tailscale_enabled": tailscale_enabled == "on",
         "notification_provider": notification_provider,
     })
+    try:
+        collectors = json.loads(setup_collectors)
+    except json.JSONDecodeError:
+        collectors = []
+    if isinstance(collectors, list):
+        for item in collectors[:25]:
+            if not isinstance(item, dict):
+                continue
+            collector_type = str(item.get("type") or "crowdsec")
+            if collector_type not in {"opnsense", "linux", "crowdsec", "fail2ban", "syslog"}:
+                continue
+            name = str(item.get("name") or "Collector").strip()
+            if not name:
+                continue
+            add_collector({
+                "type": collector_type,
+                "name": name,
+                "host": item.get("host", ""),
+                "port": item.get("port", 0),
+                "username": item.get("username", ""),
+                "connection_mode": item.get("connection_mode", "webhook" if collector_type == "crowdsec" else "network"),
+            })
     sync_configured_sources()
     return RedirectResponse(url="/settings?welcome=1", status_code=303)
 
@@ -125,11 +144,7 @@ def dashboard(request: Request):
         stats = dashboard_stats(db)
         sources = db.scalars(select(Source).order_by(Source.name)).all()
         events = db.scalars(select(SecurityEvent).order_by(SecurityEvent.seen_at.desc()).limit(settings.recent_event_limit)).all()
-    return templates.TemplateResponse(
-        request=request,
-        name="dashboard.html",
-        context={"app_name": config["app_name"], "version": APP_VERSION, "sources": sources, "events": events, "collectors": config.get("collectors", []), **stats},
-    )
+    return templates.TemplateResponse(request=request, name="dashboard.html", context={"app_name": config["app_name"], "version": APP_VERSION, "sources": sources, "events": events, "collectors": config.get("collectors", []), **stats})
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -140,11 +155,7 @@ def settings_page(request: Request, welcome: int = Query(default=0), saved: str 
     token = config["ingest_token"]
     masked_token = f"{'•' * max(len(token) - 8, 12)}{token[-8:]}"
     base_url = str(request.base_url).rstrip("/")
-    return templates.TemplateResponse(
-        request=request,
-        name="settings.html",
-        context={"config": config, "version": APP_VERSION, "welcome": bool(welcome), "saved": saved, "masked_token": masked_token, "base_url": base_url},
-    )
+    return templates.TemplateResponse(request=request, name="settings.html", context={"config": config, "version": APP_VERSION, "welcome": bool(welcome), "saved": saved, "masked_token": masked_token, "base_url": base_url})
 
 
 @app.post("/settings/general")
@@ -161,10 +172,10 @@ def save_collector_settings(crowdsec_enabled: str | None = Form(default=None), g
 
 
 @app.post("/settings/collectors/add")
-def create_collector(collector_type: str = Form(...), name: str = Form(...), host: str = Form(default=""), port: int = Form(default=0)):
+def create_collector(collector_type: str = Form(...), name: str = Form(...), host: str = Form(default=""), port: int = Form(default=0), username: str = Form(default=""), connection_mode: str = Form(default="network")):
     if collector_type not in {"opnsense", "linux", "crowdsec", "fail2ban", "syslog"}:
         raise HTTPException(status_code=400, detail="Unsupported collector type")
-    add_collector({"type": collector_type, "name": name, "host": host, "port": port})
+    add_collector({"type": collector_type, "name": name, "host": host, "port": port, "username": username, "connection_mode": connection_mode})
     sync_configured_sources()
     return RedirectResponse(url="/settings?saved=collector-added#collectors", status_code=303)
 
@@ -227,11 +238,7 @@ def ingest_crowdsec(webhook: CrowdSecWebhook, x_sentinel_token: str | None = Hea
 
 
 @app.post("/api/v1/crowdsec/{source_name}", status_code=202)
-def ingest_native_crowdsec(
-    source_name: str,
-    payload: Any = Body(...),
-    x_sentinel_token: str | None = Header(default=None),
-):
+def ingest_native_crowdsec(source_name: str, payload: Any = Body(...), x_sentinel_token: str | None = Header(default=None)):
     if not get_runtime_config().get("crowdsec_enabled", True):
         raise HTTPException(status_code=503, detail="CrowdSec ingestion is disabled")
     require_token(x_sentinel_token)
