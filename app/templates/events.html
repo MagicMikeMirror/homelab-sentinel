@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ereignisse · {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div><p class="eyebrow">SECURITY EVENT EXPLORER</p><h1>Ereignisse</h1><p class="subtitle">{{ total }} gespeicherte Alarme durchsuchen und filtern.</p></div>
+      <div class="header-actions"><div class="status"><span></span> v{{ version }}</div><a class="button secondary" href="/">Dashboard</a></div>
+    </header>
+
+    <section class="card section-card">
+      <form class="event-filters" method="get" action="/events">
+        <label class="field">Quelle
+          <select name="source">
+            <option value="">Alle Quellen</option>
+            {% for item in sources %}<option value="{{ item.name }}" {% if selected_source == item.name %}selected{% endif %}>{{ source_aliases.get(item.name.lower(), source_aliases.get(item.name, item.name)) }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="field">Schweregrad
+          <select name="severity">
+            <option value="">Alle</option>
+            {% for level in ['low','medium','high','critical'] %}<option value="{{ level }}" {% if selected_severity == level %}selected{% endif %}>{{ level }}</option>{% endfor %}
+          </select>
+        </label>
+        <div class="filter-actions"><button class="button" type="submit">Filtern</button><a class="button secondary" href="/events">Zurücksetzen</a></div>
+      </form>
+    </section>
+
+    <section class="card section-card">
+      <div class="event-list">
+        {% for event in events %}
+        <div class="event-row"><div><strong>{{ event.title }}</strong><span>{{ source_aliases.get(event.source.name.lower(), source_aliases.get(event.source.name, event.source.name)) }}{% if event.source_ip %} · {{ event.source_ip }}{% endif %}{% if event.country %} · {{ event.country }}{% endif %} · {{ event.seen_at }}</span></div><span class="severity severity-{{ event.severity }}">{{ event.severity }}</span></div>
+        {% else %}<p class="muted">Keine Ereignisse für diesen Filter gefunden.</p>{% endfor %}
+      </div>
+      <nav class="pagination">
+        {% if page > 1 %}<a class="button secondary" href="/events?page={{ page - 1 }}&source={{ selected_source }}&severity={{ selected_severity }}">← Zurück</a>{% endif %}
+        <span>Seite {{ page }} von {{ pages }}</span>
+        {% if page < pages %}<a class="button secondary" href="/events?page={{ page + 1 }}&source={{ selected_source }}&severity={{ selected_severity }}">Weiter →</a>{% endif %}
+      </nav>
+    </section>
+  </main>
+</body>
+</html>
