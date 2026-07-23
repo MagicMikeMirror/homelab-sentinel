@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, text
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.db import Base, SessionLocal, engine
@@ -143,7 +144,12 @@ def dashboard(request: Request):
     with SessionLocal() as db:
         stats = dashboard_stats(db)
         sources = db.scalars(select(Source).order_by(Source.name)).all()
-        events = db.scalars(select(SecurityEvent).order_by(SecurityEvent.seen_at.desc()).limit(settings.recent_event_limit)).all()
+        events = db.scalars(
+            select(SecurityEvent)
+            .options(selectinload(SecurityEvent.source))
+            .order_by(SecurityEvent.seen_at.desc())
+            .limit(settings.recent_event_limit)
+        ).all()
     return templates.TemplateResponse(request=request, name="dashboard.html", context={"app_name": config["app_name"], "version": APP_VERSION, "sources": sources, "events": events, "collectors": config.get("collectors", []), **stats})
 
 
