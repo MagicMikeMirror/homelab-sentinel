@@ -9,7 +9,7 @@ from fastapi import Body, FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
@@ -19,7 +19,31 @@ from app.runtime_config import add_collector, delete_collector, get_runtime_conf
 from app.schemas import CrowdSecWebhook, EventIn
 from app.services import create_event, crowdsec_payload_to_events, dashboard_stats, import_events
 
-APP_VERSION = "0.8.0-dev.1"
+APP_VERSION = "0.8.0-dev.2"
+
+
+def source_aliases(config: dict[str, Any]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    linux = [item for item in config.get("collectors", []) if item.get("enabled") and item.get("type") == "linux"]
+    firewalls = [item for item in config.get("collectors", []) if item.get("enabled") and item.get("type") == "opnsense"]
+    if len(linux) == 1:
+        aliases["server"] = str(linux[0].get("name") or "Server")
+        aliases["vps"] = aliases["server"]
+    if len(firewalls) == 1:
+        aliases["firewall"] = str(firewalls[0].get("name") or "Firewall")
+        aliases["opnsense"] = aliases["firewall"]
+    for collector in config.get("collectors", []):
+        name = str(collector.get("name") or "").strip()
+        collector_id = str(collector.get("id") or "").strip()
+        if name and collector_id:
+            aliases[collector_id] = name
+    return aliases
+
+
+def resolve_source_name(source_name: str, config: dict[str, Any] | None = None) -> str:
+    raw = source_name.strip() or "CrowdSec"
+    aliases = source_aliases(config or get_runtime_config())
+    return aliases.get(raw.lower(), aliases.get(raw, raw))
 
 
 def sync_configured_sources() -> None:
@@ -57,7 +81,8 @@ def require_token(token: str | None) -> None:
 
 
 def parse_crowdsec_events(source_name: str, payload: Any) -> list[EventIn]:
-    events = crowdsec_payload_to_events(source_name.strip() or "CrowdSec", payload)
+    display_name = resolve_source_name(source_name)
+    events = crowdsec_payload_to_events(display_name, payload)
     if not events:
         raise HTTPException(status_code=422, detail="No CrowdSec alerts found in payload")
     return events
@@ -67,7 +92,7 @@ def store_crowdsec_events(source_name: str, payload: Any) -> dict[str, Any]:
     events = parse_crowdsec_events(source_name, payload)
     with SessionLocal() as db:
         ids = [create_event(db, event).id for event in events]
-    return {"accepted": len(ids), "ids": ids, "source": source_name}
+    return {"accepted": len(ids), "ids": ids, "source": events[0].source}
 
 
 @app.get("/health")
@@ -111,10 +136,38 @@ def dashboard(request: Request):
     config = get_runtime_config()
     if not config["setup_complete"]:
         return RedirectResponse(url="/setup", status_code=303)
+    aliases = source_aliases(config)
     with SessionLocal() as db:
         stats = dashboard_stats(db)
-        events = db.scalars(select(SecurityEvent).options(selectinload(SecurityEvent.source)).order_by(SecurityEvent.seen_at.desc()).limit(settings.recent_event_limit)).all()
-    return templates.TemplateResponse(request=request, name="dashboard.html", context={"app_name": config["app_name"], "version": APP_VERSION, "events": events, "collectors": config.get("collectors", []), **stats})
+        events = db.scalars(select(SecurityEvent).options(selectinload(SecurityEvent.source)).order_by(SecurityEvent.seen_at.desc()).limit(15)).all()
+    source_stats = [
+        {"name": aliases.get(row.name.lower(), aliases.get(row.name, row.name)), "kind": row.kind, "status": row.status, "last_seen_at": row.last_seen_at, "count": row.count}
+        for row in stats.pop("source_stats")
+    ]
+    return templates.TemplateResponse(request=request, name="dashboard.html", context={"app_name": config["app_name"], "version": APP_VERSION, "events": events, "source_aliases": aliases, "source_stats": source_stats, **stats})
+
+
+@app.get("/events", response_class=HTMLResponse)
+def event_explorer(request: Request, page: int = Query(default=1, ge=1), source: str | None = Query(default=None), severity: str | None = Query(default=None)):
+    config = get_runtime_config()
+    if not config["setup_complete"]:
+        return RedirectResponse(url="/setup", status_code=303)
+    per_page = 50
+    aliases = source_aliases(config)
+    with SessionLocal() as db:
+        stmt = select(SecurityEvent).options(selectinload(SecurityEvent.source)).join(Source)
+        count_stmt = select(func.count(SecurityEvent.id)).join(Source)
+        if source:
+            stmt = stmt.where(Source.name == source)
+            count_stmt = count_stmt.where(Source.name == source)
+        if severity:
+            stmt = stmt.where(SecurityEvent.severity == severity)
+            count_stmt = count_stmt.where(SecurityEvent.severity == severity)
+        total = db.scalar(count_stmt) or 0
+        rows = db.scalars(stmt.order_by(SecurityEvent.seen_at.desc()).offset((page - 1) * per_page).limit(per_page)).all()
+        sources = db.scalars(select(Source).join(SecurityEvent).distinct().order_by(Source.name)).all()
+    pages = max(1, (total + per_page - 1) // per_page)
+    return templates.TemplateResponse(request=request, name="events.html", context={"app_name": config["app_name"], "version": APP_VERSION, "events": rows, "sources": sources, "source_aliases": aliases, "selected_source": source or "", "selected_severity": severity or "", "page": page, "pages": pages, "total": total})
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -223,7 +276,7 @@ def import_crowdsec_history(source_name: str, payload: Any = Body(...), x_sentin
     events = parse_crowdsec_events(source_name, payload)
     with SessionLocal() as db:
         result = import_events(db, events)
-    return {**result, "source": source_name}
+    return {**result, "source": events[0].source}
 
 
 @app.get("/api/v1/events")
