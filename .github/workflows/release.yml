@@ -15,6 +15,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -46,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m compileall -q app
-          pytest -q
+          python -m pytest -q
           python -c "from app.main import app; assert app.version == '${{ inputs.version }}'"
           if grep -RInE '<<<<<<<|=======|>>>>>>>' --exclude-dir=.git .; then
             echo "Conflict marker found"
